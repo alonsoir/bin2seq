@@ -14,10 +14,12 @@ import org.apache.hadoop.conf.Configuration;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import com.openresearchinc.hadoop.sequencefile.Util;
+
 public class SequenceFileTest {
 
 	@Autowired
-	HadoopClient hadoopClient;
+	Util hadoopClient;
 
 	String sequenceFileName = "/tmp/nb.sgz";
 	String hadoopLocalFS = "file:///";
@@ -26,12 +28,13 @@ public class SequenceFileTest {
 	@Test
 	public void testConfig() {
 		Configuration conf = new Configuration();
-		HadoopClient.listHadoopConfiguration(conf);
+		Util.listHadoopConfiguration(conf);
 	}
 
 	@Test
 	public void testWriteSequenceFile() {
-		String dataFileName = "/tmp/test.txt";
+		//String dataFileName = "/tmp/test.txt";
+		String dataFileName ="C:\\temp\\WindowsUpdate.txt";
 
 		try {
 			int numOfLines = 20;
@@ -43,7 +46,7 @@ public class SequenceFileTest {
 			File dataFile = new File(dataFileName);
 			FileUtils.writeLines(dataFile, lines, true);
 			Thread.sleep(2000);
-			HadoopClient.writeToSequenceFile(dataFile, sequenceFileName,
+			Util.writeToSequenceFile(dataFile, sequenceFileName,
 					hadoopLocalFS);
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -56,7 +59,7 @@ public class SequenceFileTest {
 	public void testReadSequenceFile() {
 
 		try {
-			HadoopClient.readSequenceFile(sequenceFileName, hadoopLocalFS);
+			Util.readSequenceFile(sequenceFileName, hadoopLocalFS);
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -79,12 +82,12 @@ public class SequenceFileTest {
 			File dataFile = new File(tempFileName);
 			FileUtils.writeLines(dataFile, lines, true);
 			Thread.sleep(2000);
-			HadoopClient.writeToSequenceFile(dataFile, sequenceFileName,
+			Util.writeToSequenceFile(dataFile, sequenceFileName,
 					hadoopLocalFS);
-			HadoopClient.readSequenceFile(sequenceFileName, hadoopLocalFS);
-			HadoopClient.copySequenceFile(sequenceFileName, sequenceFileName,
+			Util.readSequenceFile(sequenceFileName, hadoopLocalFS);
+			Util.copySequenceFile(sequenceFileName, sequenceFileName,
 					hadoopRemoteFS);
-			HadoopClient.readSequenceFile(sequenceFileName, hadoopRemoteFS);
+			Util.readSequenceFile(sequenceFileName, hadoopRemoteFS);
 		} catch (IOException e) {
 			e.printStackTrace();
 		} catch (InterruptedException e) {
