@@ -11,8 +11,9 @@ package com.openresearchinc.hadoop.sequencefile;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Iterator;
-import java.util.List;
+import java.util.Map;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
@@ -20,90 +21,126 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.IOUtils;
-import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.SequenceFile;
+import org.apache.hadoop.io.SequenceFile.CompressionType;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.compress.BZip2Codec;
+import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.GzipCodec;
+import org.apache.hadoop.io.compress.SnappyCodec;
+import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.log4j.Logger;
-
-
 
 public class Util {
 
 	private static Configuration conf = new Configuration();
 	private final static Logger logger = Logger.getLogger(Util.class);
 
-	public static void main(String[] args) {
-		// TODO Auto-generated method stub
-
+	public static void main(String[] args) throws Exception {
+		String[] otherArgs = new GenericOptionsParser(conf, args)
+				.getRemainingArgs();
+		if (otherArgs.length != 3) {
+			System.err
+					.println("Usage: hadoop jar ./target/*.jar com.openresearchinc.hadoop.sequencefile.Util <input-uri> <output-uri> <gzip|bz2|snappy>");
+			System.exit(2);
+		}
+		CompressionCodec codec = null;
+		switch (otherArgs[2].toLowerCase()) {
+		case "gzip":
+			codec = new GzipCodec();
+			break;
+		case "bz2":
+			codec = new BZip2Codec();
+			break;
+		case "snappy":
+			codec = new SnappyCodec();
+			break;
+		default:
+			codec = new GzipCodec();
+		}
+		Util.writeToSequenceFile(otherArgs[0], otherArgs[1], codec);
 	}
 
-	/**
-	 * Convert the lines of text in a file to binary and write to a Hadoop
-	 * sequence file.
-	 * 
-	 * @param dataFile
-	 *            File containing lines of text
-	 * @param sequenceFileName
-	 *            Name of the sequence file to create
-	 * @param hadoopFS
-	 *            Hadoop file system
-	 * 
-	 * @throws IOException
-	 */
-	public static void writeToSequenceFile(File dataFile,
-			String sequenceFileName, String hadoopFS) throws IOException {
+	public static void writeToSequenceFile(String inputURI, String outputURI,
+			CompressionCodec codec) throws IOException {
 
-		IntWritable key = null;
-		BytesWritable value = null;
+		Path path = null;
+		String inputFile = null;
+		if (inputURI.startsWith("file://")) {
+			inputFile = inputURI.substring(7, inputURI.length());
+		} else if (inputURI.startsWith("s3://")) {
+			System.exit(2); // TODO
+		} else if (inputURI.startsWith("hdfs://")) {
+			System.exit(2); // TODO
+		} else {
+			System.exit(2); // TODO
+		}
 
-		conf.set("fs.defaultFS", hadoopFS);
-		Path path = new Path(sequenceFileName);
+		if (outputURI.startsWith("hdfs://")) {
+			if (!conf.get("fs.defaultFS").contains("hdfs://")) {
+				conf.set("fs.defaultFS", "hdfs://" + outputURI.split("/")[2]);
+			}// only useful in eclipse, no need if running hadoop jar
+			path = new Path(outputURI.replaceAll("hdfs://[a-z\\.\\:0-9]+", ""));
+		} else if (outputURI.startsWith("s3://")) {
+			System.exit(2); // TODO
+		} else if (outputURI.startsWith("file://")) {
+			System.exit(2); // TODO
+		} else {
+			System.exit(2); // TODO
+		}
 
-		if ((conf != null) && (dataFile != null) && (dataFile.exists())) {
+		File dataFile = new File(inputFile);
+		if (dataFile.exists()) {
 			SequenceFile.Writer writer = SequenceFile.createWriter(conf,
 					SequenceFile.Writer.file(path), SequenceFile.Writer
-							.compression(SequenceFile.CompressionType.RECORD,
-									new GzipCodec()), SequenceFile.Writer
-							.keyClass(IntWritable.class), SequenceFile.Writer
-							.valueClass(BytesWritable.class));
+							.compression(CompressionType.RECORD, codec),
+					SequenceFile.Writer.keyClass(Text.class),
+					SequenceFile.Writer.valueClass(BytesWritable.class));
 
-			List<String> lines = FileUtils.readLines(dataFile);
+			byte[] binary = FileUtils.readFileToByteArray(dataFile);
 
-			for (int i = 0; i < lines.size(); i++) {
-				value = new BytesWritable(lines.get(i).getBytes());
-				key = new IntWritable(i);
-				writer.append(key, value);
-			}
+			// use absolute path as key
+			Text key = new Text(dataFile.getAbsolutePath());
+			// use binary content as value
+			BytesWritable value = new BytesWritable(binary);
+			writer.append(key, value);
 			IOUtils.closeStream(writer);
 		}
 	}
 
-	/**
-	 * Read a Hadoop sequence file on HDFS.
-	 * 
-	 * @param sequenceFileName
-	 *            Name of the sequence file to read
-	 * @param hadoopFS
-	 *            Hadoop file system
-	 * 
-	 * @throws IOException
-	 */
-	public static void readSequenceFile(String sequenceFileName, String hadoopFS)
+	public static Map<Text, byte[]> readSequenceFile(String sequenceFileURI)
 			throws IOException {
-		conf.set("fs.defaultFS", hadoopFS);
-		Path path = new Path(sequenceFileName);
+		Map<Text, byte[]> map = new HashMap<Text, byte[]>();
+		Path path = null;
+		if (sequenceFileURI.startsWith("hdfs://")) {
+			if (!conf.get("fs.defaultFS").contains("hdfs://")) {
+				conf.set("fs.defaultFS", "hdfs://"
+						+ sequenceFileURI.split("/")[2]);
+			}// only useful in eclipse, no need if running hadoop jar
+			path = new Path(sequenceFileURI.replaceAll(
+					"hdfs://[a-z\\.\\:0-9]+", ""));
+		} else if (sequenceFileURI.startsWith("s3://")) {
+			System.exit(2); // TODO
+		} else if (sequenceFileURI.startsWith("file://")) {
+			System.exit(2); // TODO
+		} else {
+			System.exit(2); // TODO
+		}
+
 		SequenceFile.Reader reader = new SequenceFile.Reader(conf,
 				SequenceFile.Reader.file(path));
-		IntWritable key = (IntWritable) ReflectionUtils.newInstance(
-				reader.getKeyClass(), conf);
+		Text key = (Text) ReflectionUtils.newInstance(reader.getKeyClass(),
+				conf);
 		BytesWritable value = (BytesWritable) ReflectionUtils.newInstance(
 				reader.getValueClass(), conf);
 		while (reader.next(key, value)) {
-			logger.info("key : " + key + " - value : "
-					+ new String(value.getBytes()));
+			logger.info("key : " + key.toString() + " - value size: "
+					+ value.getBytes().length);
+			map.put(key, value.getBytes());
 		}
 		IOUtils.closeStream(reader);
+		return map;
 	}
 
 	/**

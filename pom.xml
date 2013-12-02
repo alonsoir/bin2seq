@@ -1,19 +1,31 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
-	<groupId>tar2seq</groupId>
-	<artifactId>tar2seq</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
+	<groupId>com.openresearchinc.hadoop</groupId>
+	<artifactId>bin2seq</artifactId>
+	<version>0.1</version>
+
+	<repositories>
+		<repository>
+			<id>cloudera</id>
+			<url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
+		</repository>
+	</repositories>
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<hadoop-client.version>2.2.0</hadoop-client.version>
+		<hadoop.version>2.0.0-cdh4.5.0</hadoop.version> <!-- obtain by running $hadoop version -->
 		<junit.version>LATEST</junit.version>
 		<log4j.version>LATEST</log4j.version>
 		<spring.version>3.2.5.RELEASE</spring.version>
 	</properties>
 
 	<dependencies>
+		<dependency>
+			<groupId>edu.ucar</groupId>
+			<artifactId>netcdf</artifactId>
+			<version>4.2.20</version>
+		</dependency>
 		<!-- Test -->
 		<dependency>
 			<groupId>junit</groupId>
@@ -30,12 +42,16 @@
 		<!-- Hadoop -->
 		<dependency>
 			<groupId>org.apache.hadoop</groupId>
-			<artifactId>hadoop-client</artifactId>
-			<version>${hadoop-client.version}</version>
+			<artifactId>hadoop-common</artifactId>
+			<version>${hadoop.version}</version>
 			<scope>provided</scope>
 		</dependency>
-
-
+		<dependency>
+			<groupId>org.apache.hadoop</groupId>
+			<artifactId>hadoop-client</artifactId>
+			<version>${hadoop.version}</version>
+			<scope>provided</scope>
+		</dependency>
 		<!-- Logging -->
 		<dependency>
 			<groupId>log4j</groupId>
