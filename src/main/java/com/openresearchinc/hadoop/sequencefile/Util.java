@@ -26,6 +26,7 @@ import org.apache.hadoop.io.SequenceFile.CompressionType;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.compress.BZip2Codec;
 import org.apache.hadoop.io.compress.CompressionCodec;
+import org.apache.hadoop.io.compress.DefaultCodec;
 import org.apache.hadoop.io.compress.GzipCodec;
 import org.apache.hadoop.io.compress.SnappyCodec;
 import org.apache.hadoop.util.GenericOptionsParser;
@@ -40,26 +41,35 @@ public class Util {
 	public static void main(String[] args) throws Exception {
 		String[] otherArgs = new GenericOptionsParser(conf, args)
 				.getRemainingArgs();
-		if (otherArgs.length != 3) {
+		if (otherArgs.length == 3) {
+			CompressionCodec codec = null;
+			switch (otherArgs[2].toLowerCase()) {
+			case "default":
+				codec = new DefaultCodec();
+				break;
+			case "gzip":
+				codec = new GzipCodec();
+				break;
+			case "bz2":
+				codec = new BZip2Codec();
+				break;
+			case "snappy":
+				codec = new SnappyCodec();
+				break;
+			default:
+				codec = new GzipCodec();
+			}
+			Util.writeToSequenceFile(otherArgs[0], otherArgs[1], codec);
+		} else if (otherArgs.length == 1) {
+			Util.readSequenceFile(otherArgs[0]);
+		} else {
 			System.err
-					.println("Usage: hadoop jar ./target/*.jar com.openresearchinc.hadoop.sequencefile.Util <input-uri> <output-uri> <gzip|bz2|snappy>");
+					.println("Usage: hadoop jar ./target/*.jar com.openresearchinc.hadoop.sequencefile.Util <input-file|dir> <output-file|dir> <default|gzip|bz2|snappy>");
+			System.err
+					.println("or: hadoop jar ./target/*.jar com.openresearchinc.hadoop.sequencefile.Util <file|dir-for-sequencefiles>");
+
 			System.exit(2);
 		}
-		CompressionCodec codec = null;
-		switch (otherArgs[2].toLowerCase()) {
-		case "gzip":
-			codec = new GzipCodec();
-			break;
-		case "bz2":
-			codec = new BZip2Codec();
-			break;
-		case "snappy":
-			codec = new SnappyCodec();
-			break;
-		default:
-			codec = new GzipCodec();
-		}
-		Util.writeToSequenceFile(otherArgs[0], otherArgs[1], codec);
 	}
 
 	public static void writeToSequenceFile(String inputURI, String outputURI,
@@ -82,6 +92,9 @@ public class Util {
 				conf.set("fs.defaultFS", "hdfs://" + outputURI.split("/")[2]);
 			}// only useful in eclipse, no need if running hadoop jar
 			path = new Path(outputURI.replaceAll("hdfs://[a-z\\.\\:0-9]+", ""));
+		} else if (outputURI.startsWith("file://")) {
+			conf.set("fs.defaultFS", "file://" + outputURI.split("/")[2]);
+			path = new Path(outputURI.replaceAll("file://", ""));
 		} else if (outputURI.startsWith("s3://")) {
 			System.exit(2); // TODO
 		} else if (outputURI.startsWith("file://")) {
@@ -90,16 +103,29 @@ public class Util {
 			System.exit(2); // TODO
 		}
 
-		File dataFile = new File(inputFile);
-		if (dataFile.exists()) {
+		File directory = new File(inputFile);
+		if (!directory.exists())
+			return;
+
+		File[] dataFiles;
+		if (directory.isFile()) {// if a single file
+			dataFiles = new File[1];
+			dataFiles[0] = directory;
+			path = path.getParent();
+		} else {// if directory, include all sub-dir and files underneath it
+			dataFiles = directory.listFiles();
+		}
+		for (int i = 0; i < dataFiles.length; ++i) {
+			File dataFile = dataFiles[i];
+
+			Path destpath = new Path(path + "/" + dataFile.getName() + ".seq");
 			SequenceFile.Writer writer = SequenceFile.createWriter(conf,
-					SequenceFile.Writer.file(path), SequenceFile.Writer
+					SequenceFile.Writer.file(destpath), SequenceFile.Writer
 							.compression(CompressionType.RECORD, codec),
 					SequenceFile.Writer.keyClass(Text.class),
 					SequenceFile.Writer.valueClass(BytesWritable.class));
 
 			byte[] binary = FileUtils.readFileToByteArray(dataFile);
-
 			// use absolute path as key
 			Text key = new Text(dataFile.getAbsolutePath());
 			// use binary content as value
@@ -120,6 +146,8 @@ public class Util {
 			}// only useful in eclipse, no need if running hadoop jar
 			path = new Path(sequenceFileURI.replaceAll(
 					"hdfs://[a-z\\.\\:0-9]+", ""));
+		} else if (sequenceFileURI.startsWith("file://")) {
+			path = new Path(sequenceFileURI.replaceAll("file://", ""));
 		} else if (sequenceFileURI.startsWith("s3://")) {
 			System.exit(2); // TODO
 		} else if (sequenceFileURI.startsWith("file://")) {
