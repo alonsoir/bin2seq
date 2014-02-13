@@ -1,13 +1,12 @@
-This project was originally developed by [Stuart Sierra](http://stuartsierra.com/2008/04/24/a-million-little-files)
+It is a prerequisite to convert files in arbitrary binary formats into a Hadoop SequenceFile format,
+so they can be split by M/R jobs and processing can be parallelized to distribute nodes.  
+ 
+The 'bin2seq' borrows ideas from 'tar2seq' developed by [Stuart Sierra](http://stuartsierra.com/2008/04/24/a-million-little-files)
 
-I've slightly modified it in order to make it fit my need. My first objective was to extend the [Terrier IR platform](http://www.terrier.org) so that it can process large text collection packed up in sequence files (see [issue 182](http://terrier.org/issues/browse/TR-182))
+Thanks to the latest Hadoop development like multiple NameNode-support and HDFS-federation (e.g., HDFS-1052), 
+the “large-number-of-small-files” does not pose the same challenge as when 'tar2seq' was developed (prior to Hadoop v0.22).  
+Therefore, bin2seq is a much simpler because we are performing one-binary-file-to-one-sequencefile (bin2seq) 
+conversion, and the benefit of do so is to maintain the same file structure and nomenclature across 
+traditional file system and HDFS.  
 
-
-#### How to use
-
-1. ant (it will create tar-to-seq.jar)
-2. java -jar tar-to-seq.jar [-c] <collection path> <destination path>
-
-example: java -jar tar-to-seq.jar -c trec.tar.gz trec.seq
-
-Use the optional -c option to enable record compression
+Code-wise, there is little similarity between bin2seq and tar2seq. bin2seq is built by Maven. 
