@@ -12,6 +12,19 @@
 		</repository>
 	</repositories>
 
+	<build>
+		<pluginManagement>
+			<plugins>
+				<plugin>
+					<artifactId>maven-compiler-plugin</artifactId>
+					<configuration>
+						<source>1.7</source>
+						<target>1.7</target>
+					</configuration>
+				</plugin>
+			</plugins>
+		</pluginManagement>
+	</build>
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<hadoop.version>2.0.0-cdh4.5.0</hadoop.version> <!-- obtain by running $hadoop version -->
@@ -21,6 +34,11 @@
 	</properties>
 
 	<dependencies>
+		<dependency>
+			<groupId>org.hdfgroup</groupId>
+			<artifactId>hdf-java</artifactId>
+			<version>2.6.1</version>
+		</dependency>
 		<dependency>
 			<groupId>edu.ucar</groupId>
 			<artifactId>netcdf</artifactId>
