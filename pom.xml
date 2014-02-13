@@ -10,17 +10,40 @@
 			<id>cloudera</id>
 			<url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
 		</repository>
+		<repository>
+			<id>javacpp</id>
+			<name>JavaCPP</name>
+			<url>http://maven2.javacpp.googlecode.com/git/</url>
+		</repository>
 	</repositories>
 
+	<build>
+		<pluginManagement>
+			<plugins>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-compiler-plugin</artifactId>
+					<configuration>
+						<source>1.7</source>
+						<target>1.7</target>
+					</configuration>
+				</plugin>
+			</plugins>
+		</pluginManagement>
+	</build>
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<hadoop.version>2.0.0-cdh4.5.0</hadoop.version> <!-- obtain by running $hadoop version -->
 		<junit.version>LATEST</junit.version>
 		<log4j.version>LATEST</log4j.version>
-		<spring.version>3.2.5.RELEASE</spring.version>
 	</properties>
 
 	<dependencies>
+		<dependency>
+			<groupId>org.hdfgroup</groupId>
+			<artifactId>hdf-java</artifactId>
+			<version>2.6.1</version>
+		</dependency>
 		<dependency>
 			<groupId>edu.ucar</groupId>
 			<artifactId>netcdf</artifactId>
@@ -58,19 +81,5 @@
 			<artifactId>log4j</artifactId>
 			<version>${log4j.version}</version>
 		</dependency>
-
-		<!-- Spring -->
-		<dependency>
-			<groupId>org.springframework</groupId>
-			<artifactId>spring-context</artifactId>
-			<version>${spring.version}</version>
-		</dependency>
-
-		<dependency>
-			<groupId>org.springframework</groupId>
-			<artifactId>spring-test</artifactId>
-			<version>3.2.5.RELEASE</version>
-		</dependency>
-
 	</dependencies>
 </project>
