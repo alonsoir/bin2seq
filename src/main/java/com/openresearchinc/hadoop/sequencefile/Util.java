@@ -28,6 +28,7 @@ import org.apache.hadoop.io.compress.BZip2Codec;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.GzipCodec;
 import org.apache.hadoop.io.compress.SnappyCodec;
+import org.apache.hadoop.io.compress.DefaultCodec;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.log4j.Logger;
@@ -57,7 +58,7 @@ public class Util {
 			codec = new SnappyCodec();
 			break;
 		default:
-			codec = new GzipCodec();
+			codec = new DefaultCodec();
 		}
 		Util.writeToSequenceFile(otherArgs[0], otherArgs[1], codec);
 	}
@@ -85,7 +86,7 @@ public class Util {
 		} else if (outputURI.startsWith("s3://")) {
 			System.exit(2); // TODO
 		} else if (outputURI.startsWith("file://")) {
-			System.exit(2); // TODO
+			path = new Path(outputURI.replaceAll("file://", ""));
 		} else {
 			System.exit(2); // TODO
 		}
@@ -109,6 +110,34 @@ public class Util {
 		}
 	}
 
+	public static void listSequenceFileKeys(String sequenceFileURI)
+			throws Exception {		
+		Path path = null;
+		if (sequenceFileURI.startsWith("hdfs://")) {
+			if (!conf.get("fs.defaultFS").contains("hdfs://")) {
+				conf.set("fs.defaultFS", "hdfs://"
+						+ sequenceFileURI.split("/")[2]);
+			}// only useful in eclipse, no need if running hadoop jar
+			path = new Path(sequenceFileURI.replaceAll(
+					"hdfs://[a-z\\.\\:0-9]+", ""));
+		} else if (sequenceFileURI.startsWith("s3://")) {
+			System.exit(2); // TODO
+		} else if (sequenceFileURI.startsWith("file://")) {
+			path = new Path(sequenceFileURI.replaceAll("file://", ""));
+		} else {
+			System.exit(2); // TODO
+		}
+
+		SequenceFile.Reader reader = new SequenceFile.Reader(conf,
+				SequenceFile.Reader.file(path));
+		Text key = (Text) ReflectionUtils.newInstance(reader.getKeyClass(),
+				conf);
+		while (reader.next(key)) {
+			logger.info("key : " + key.toString());			
+		}
+		IOUtils.closeStream(reader);
+	}
+
 	public static Map<Text, byte[]> readSequenceFile(String sequenceFileURI)
 			throws IOException {
 		Map<Text, byte[]> map = new HashMap<Text, byte[]>();
@@ -123,7 +152,7 @@ public class Util {
 		} else if (sequenceFileURI.startsWith("s3://")) {
 			System.exit(2); // TODO
 		} else if (sequenceFileURI.startsWith("file://")) {
-			System.exit(2); // TODO
+			path = new Path(sequenceFileURI.replaceAll("file://", ""));
 		} else {
 			System.exit(2); // TODO
 		}

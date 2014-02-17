@@ -14,6 +14,10 @@ import ncsa.hdf.object.h5.H5File;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.compress.BZip2Codec;
+import org.apache.hadoop.io.compress.DefaultCodec;
+import org.apache.hadoop.io.compress.GzipCodec;
+import org.apache.hadoop.io.compress.Lz4Codec;
 import org.apache.hadoop.io.compress.SnappyCodec;
 import org.junit.Test;
 
@@ -31,13 +35,12 @@ public class SequenceFileTest {
 	// TODO: python
 	// http://stackoverflow.com/questions/16654251/can-h5py-load-a-file-from-a-byte-array-in-memory
 	public void testNetcdfToH5() throws Exception {
-		File file = new File(this.getClass()
-				.getResource("/TRAXLZU12903D05F94.h5").getPath());
-
 		H5File h5 = hdf5_getters.hdf5_open_readonly(this.getClass()
 				.getResource("/TRAXLZU12903D05F94.h5").getPath());
 		double h5_temp = hdf5_getters.get_tempo(h5);
 
+		File file = new File(this.getClass()
+				.getResource("/TRAXLZU12903D05F94.h5").getPath());
 		byte[] netcdfinbyte = FileUtils.readFileToByteArray(file);
 		NetcdfFile netCDFfile = NetcdfFile.openInMemory("inmemory.h5",
 				netcdfinbyte);// use any dummy filename for file in memory
@@ -45,17 +48,32 @@ public class SequenceFileTest {
 				.findVariable("/analysis/songs.tempo");
 		Array content = var.read();// 1D array
 		double netcdf_tempo = content.getDouble(0); // 1 column only
-
 		assertEquals(h5_temp, netcdf_tempo, 0.001);
 	}
 
 	@Test
-	public void testNetcdf() throws IOException {
+	public void testReadnetCDFinSequnceFileFormat() throws IOException {
+
+		String path = this.getClass().getResource("/ncar.nc").getPath();
+		Util.writeToSequenceFile("file://" + path,
+				"hdfs://master:8020/tmp/ncar.seq", new DefaultCodec());
 		Map<Text, byte[]> netcdfsequnce = Util
-				.readSequenceFile("hdfs://master:8020/tmp/nc1.seq");
+				.readSequenceFile("hdfs://master:8020/tmp/ncar.seq");
 		for (Map.Entry<Text, byte[]> entry : netcdfsequnce.entrySet()) {
 			NetcdfFile ncFile = NetcdfFile.openInMemory(entry.getKey()
 					.toString(), entry.getValue());
+			assertEquals(ncFile.getDimensions().size(), 5);
+		}
+	}
+
+	@Test
+	public void testDataAdaptors() throws Exception {
+		Util.writeToSequenceFile("file:///etc/passwd",
+				"file:///tmp/passwd.seq", new DefaultCodec());
+		Map<Text, byte[]> passwd = Util
+				.readSequenceFile("file:///tmp/passwd.seq");
+		for (Map.Entry<Text, byte[]> entry : passwd.entrySet()) {
+			assertEquals(entry.getKey().toString(), "/etc/passwd");
 		}
 	}
 
@@ -66,22 +84,27 @@ public class SequenceFileTest {
 	}
 
 	@Test
-	public void testWriteSequenceFile() {
-		try {
-			Util.writeToSequenceFile("file:///etc/passwd",
-					"hdfs://master:8020/tmp/passwd.seq", new SnappyCodec());
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
+	// get Hadoop source from
+	// http://apache.mirrors.tds.net/hadoop/common/stable/hadoop-2.2.0-src.tar.gz
+	// cd hadoop-common-project/hadoop-common
+	// $mvn compile -Pnative
+	// cp hadoop-common/target/native/target/usr/local/lib/libhadoop.so
+	// hadoop-2.2.0/lib/native/.
+	// library -Djava.library.path=/home/heq/hadoop-2.2.0/lib/native
+	public void testCodecs() throws Exception {
+		String path = this.getClass().getResource("/ncar.nc").getPath();
+		Util.writeToSequenceFile("file://" + path,
+				"hdfs://master:8020/tmp/ncar.seq", new GzipCodec());
+		Util.writeToSequenceFile("file://" + path,
+				"hdfs://master:8020/tmp/ncar.seq", new BZip2Codec());
+		Util.writeToSequenceFile("file://" + path,
+				"hdfs://master:8020/tmp/ncar.seq", new Lz4Codec());
+		Util.writeToSequenceFile("file://" + path,
+				"hdfs://master:8020/tmp/ncar.seq", new SnappyCodec());
 	}
 
 	@Test
-	public void testReadSequenceFile() {
-
-		try {
-			Util.readSequenceFile("hdfs://master:8020/tmp/passwd.seq");
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
+	public void testListSequenceFile() throws Exception {
+		Util.listSequenceFileKeys("hdfs://master:8020/tmp/ncar.seq");
 	}
 }
