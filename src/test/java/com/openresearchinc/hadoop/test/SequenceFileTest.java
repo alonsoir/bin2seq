@@ -107,4 +107,13 @@ public class SequenceFileTest {
 	public void testListSequenceFile() throws Exception {
 		Util.listSequenceFileKeys("hdfs://master:8020/tmp/ncar.seq");
 	}
+	
+	@Test
+	public void testS3() throws Exception {
+		String existingBucketName = "ori-tmp"; // dir
+		String keyName = "passwd"; // file
+		String inputURI="s3://"+existingBucketName+".s3.amazonaws.com/"+keyName;
+		Util.writeToSequenceFile(inputURI, "file:///tmp/passwd.seq", new GzipCodec());
+		Util.writeToSequenceFile(inputURI, "hdfs://master:8020/tmp/passwd.seq", new SnappyCodec());
+	}
 }

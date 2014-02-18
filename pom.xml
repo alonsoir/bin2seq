@@ -27,7 +27,8 @@
 	</build>
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<!--  <hadoop.version>2.0.0-cdh4.5.0</hadoop.version> obtain by running $hadoop version -->
+		<!-- <hadoop.version>2.0.0-cdh4.5.0</hadoop.version> obtain by running 
+			$hadoop version -->
 		<hadoop.version>2.2.0</hadoop.version> <!-- obtain by running $hadoop version -->
 		<junit.version>LATEST</junit.version>
 		<log4j.version>LATEST</log4j.version>
@@ -35,6 +36,11 @@
 	</properties>
 
 	<dependencies>
+			<dependency>
+			<groupId>com.amazonaws</groupId>
+			<artifactId>aws-java-sdk</artifactId>
+			<version>1.0.002</version>
+		</dependency>	
 		<dependency>
 			<groupId>org.hdfgroup</groupId>
 			<artifactId>hdf-java</artifactId>
