@@ -9,11 +9,15 @@ package com.openresearchinc.hadoop.sequencefile;
 //2. include file from http://, s3://(AWS cloud storage),....
 //3. include more compression modules: bz2, snappy, ... 
 
+import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.io.FileUtils;
@@ -34,13 +38,22 @@ import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.log4j.Logger;
 
-import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.auth.PropertiesCredentials;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.model.GetObjectRequest;
 import com.amazonaws.services.s3.model.S3Object;
+
+//@formatter:off
+/**
+ * export LIBJARS=/path/jar1,/path/jar2 
+ * export LIBJARS=~/.m2/repository/com/amazonaws/aws-java-sdk/1.0.002/aws-java-sdk-1.0.002.jar 
+ * export HADOOP_CLASSPATH=`echo ${LIBJARS} | sed s/,/:/g`
+ * $hadoop jar <path>/bin2seq.jar com.openresearchinc.hadoop.sequencefile.Util -in <inuri> -out <outuri> -codec <default|gzip|bz2|snappy> -libjars $LIBJARS"
+ * 
+ * @author heq 
+ */
+// @formatter:on
 
 public class Util {
 
@@ -48,28 +61,54 @@ public class Util {
 	private final static Logger logger = Logger.getLogger(Util.class);
 
 	public static void main(String[] args) throws Exception {
+		String usage = "Usage: hadoop jar ./target/*.jar com.openresearchinc.hadoop.sequencefile.Util -in <input-uri> -out <output-uri> -codec <gzip|bz2|snappy>";
+		String inputURI = null, outputURI = null, codec = null;
+		CompressionCodec compression = null;
 		String[] otherArgs = new GenericOptionsParser(conf, args)
 				.getRemainingArgs();
-		if (otherArgs.length != 3) {
-			System.err
-					.println("Usage: hadoop jar ./target/*.jar com.openresearchinc.hadoop.sequencefile.Util <input-uri> <output-uri> <gzip|bz2|snappy>");
+
+		List<String> argList = Arrays.asList(otherArgs);
+		int pos = argList.indexOf("-in");
+		if (pos == -1) {
+			System.err.println(usage);
 			System.exit(2);
 		}
-		CompressionCodec codec = null;
-		switch (otherArgs[2].toLowerCase()) {
+		inputURI = otherArgs[pos + 1];
+
+		pos = argList.indexOf("-out");
+		if (pos == -1) {
+			System.err.println(usage);
+			System.exit(2);
+		}
+		outputURI = otherArgs[pos + 1];
+		if (pos == -1) {
+			System.err.println(usage);
+			System.exit(2);
+		}
+
+		pos = argList.indexOf("-codec");
+		if (pos == -1) {
+			System.err.println(usage);
+			System.exit(2);
+		}
+		codec = otherArgs[pos + 1];
+		switch (codec.toLowerCase()) {
 		case "gzip":
-			codec = new GzipCodec();
+			compression = new GzipCodec();
 			break;
 		case "bz2":
-			codec = new BZip2Codec();
+			compression = new BZip2Codec();
 			break;
 		case "snappy":
-			codec = new SnappyCodec();
+			compression = new SnappyCodec();
 			break;
+		case "default":
+			compression = new DefaultCodec();
 		default:
-			codec = new DefaultCodec();
+			System.err.println(usage);
+			System.exit(2);
 		}
-		Util.writeToSequenceFile(otherArgs[0], otherArgs[1], codec);
+		Util.writeToSequenceFile(inputURI, outputURI, compression);
 	}
 
 	public static void writeToSequenceFile(String inputURI, String outputURI,
@@ -102,8 +141,15 @@ public class Util {
 			objectContent.close();
 			key = new Text(inputURI);
 			value = new BytesWritable(bytes);
-		} else if (inputURI.startsWith("hdfs://")) {
-			System.exit(2); // TODO
+		} else if (inputURI.startsWith("http://")) {
+			String[] args = inputURI.split("/");
+			String host = args[2];
+			String uri = inputURI.replaceAll("http://[a-zA-Z0-9-.]+", "");
+			InputStream in = new BufferedInputStream(
+					new URL("http", host, uri).openStream());
+			key = new Text(inputURI);
+			bytes = org.apache.commons.io.IOUtils.toByteArray(in);
+			value = new BytesWritable(bytes);
 		} else {
 			System.exit(2); // TODO
 		}

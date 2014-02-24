@@ -1,7 +1,6 @@
 package com.openresearchinc.hadoop.test;
 
-//Also credit goes to code from blog: 
-//http://noushinb.blogspot.com/2013/04/reading-writing-hadoop-sequence-files.html
+//Credit to blog:http://noushinb.blogspot.com/2013/04/reading-writing-hadoop-sequence-files.html
 
 import static org.junit.Assert.assertEquals;
 
@@ -84,13 +83,13 @@ public class SequenceFileTest {
 	}
 
 	@Test
-	// get Hadoop source from
-	// http://apache.mirrors.tds.net/hadoop/common/stable/hadoop-2.2.0-src.tar.gz
+	//@formatter:off
+	// get Hadoop source from http://apache.mirrors.tds.net/hadoop/common/stable/hadoop-2.2.0-src.tar.gz
 	// cd hadoop-common-project/hadoop-common
 	// $mvn compile -Pnative
-	// cp hadoop-common/target/native/target/usr/local/lib/libhadoop.so
-	// hadoop-2.2.0/lib/native/.
+	// cp hadoop-common/target/native/target/usr/local/lib/libhadoop.so ~/hadoop-2.2.0/lib/native/.
 	// library -Djava.library.path=/home/heq/hadoop-2.2.0/lib/native
+	//@formatter:on
 	public void testCodecs() throws Exception {
 		String path = this.getClass().getResource("/ncar.nc").getPath();
 		Util.writeToSequenceFile("file://" + path,
@@ -107,13 +106,21 @@ public class SequenceFileTest {
 	public void testListSequenceFile() throws Exception {
 		Util.listSequenceFileKeys("hdfs://master:8020/tmp/ncar.seq");
 	}
-	
+
 	@Test
 	public void testS3() throws Exception {
+
+		String inputURI = "http://nasanex.s3.amazonaws.com/NEX-DCP30/BCSD/rcp26/mon/atmos/pr/r1i1p1/v1.0/CONUS/pr_amon_BCSD_rcp26_r1i1p1_CONUS_HadGEM2-ES_200512-200512.nc";
+		Util.writeToSequenceFile(inputURI,
+				"hdfs://master:8020/tmp/nasa-nc.seq", new GzipCodec());
+
 		String existingBucketName = "ori-tmp"; // dir
 		String keyName = "passwd"; // file
-		String inputURI="s3://"+existingBucketName+".s3.amazonaws.com/"+keyName;
-		Util.writeToSequenceFile(inputURI, "file:///tmp/passwd.seq", new GzipCodec());
-		Util.writeToSequenceFile(inputURI, "hdfs://master:8020/tmp/passwd.seq", new SnappyCodec());
+		inputURI = "s3://" + existingBucketName + ".s3.amazonaws.com/"
+				+ keyName;
+		Util.writeToSequenceFile(inputURI, "file:///tmp/passwd.seq",
+				new GzipCodec());
+		Util.writeToSequenceFile(inputURI, "hdfs://master:8020/tmp/passwd.seq",
+				new SnappyCodec());
 	}
 }

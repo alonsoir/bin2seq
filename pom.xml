@@ -13,6 +13,15 @@
 	</repositories>
 
 	<build>
+		<resources>
+			<resource>
+				<directory>src/main/resources</directory>
+				<excludes>
+					<exclude>*.*</exclude>
+				</excludes>
+				<filtering>false</filtering>
+			</resource>
+		</resources>
 		<pluginManagement>
 			<plugins>
 				<plugin>
@@ -22,6 +31,41 @@
 						<target>1.7</target>
 					</configuration>
 				</plugin>
+
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-jar-plugin</artifactId>
+					<version>2.4</version>
+					<configuration>
+						<archive>
+							<manifest>
+								<addClasspath>true</addClasspath>
+								<mainClass>com.openresearchinc.hadoop.sequencefile.Util</mainClass>
+								<classpathPrefix>lib/</classpathPrefix>
+							</manifest>
+						</archive>
+					</configuration>
+				</plugin>
+
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-dependency-plugin</artifactId>
+					<version>2.5.1</version>
+					<executions>
+						<execution>
+							<id>copy-dependencies</id>
+							<phase>package</phase>
+							<goals>
+								<goal>copy-dependencies</goal>
+							</goals>
+							<configuration>
+								<includeGroupIds>log4j</includeGroupIds>
+								<outputDirectory>${project.build.directory}/dependency-jars/</outputDirectory>
+							</configuration>
+						</execution>
+					</executions>
+				</plugin>
+
 			</plugins>
 		</pluginManagement>
 	</build>
@@ -36,11 +80,11 @@
 	</properties>
 
 	<dependencies>
-			<dependency>
+		<dependency>
 			<groupId>com.amazonaws</groupId>
 			<artifactId>aws-java-sdk</artifactId>
 			<version>1.0.002</version>
-		</dependency>	
+		</dependency>
 		<dependency>
 			<groupId>org.hdfgroup</groupId>
 			<artifactId>hdf-java</artifactId>
