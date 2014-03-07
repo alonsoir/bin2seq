@@ -7,6 +7,7 @@ import static org.junit.Assert.assertEquals;
 import java.io.File;
 import java.io.IOException;
 import java.util.Map;
+import java.util.Random;
 
 import ncsa.hdf.object.h5.H5File;
 
@@ -18,16 +19,121 @@ import org.apache.hadoop.io.compress.DefaultCodec;
 import org.apache.hadoop.io.compress.GzipCodec;
 import org.apache.hadoop.io.compress.Lz4Codec;
 import org.apache.hadoop.io.compress.SnappyCodec;
+import org.apache.log4j.Logger;
 import org.junit.Test;
 
 import ucar.ma2.Array;
+import ucar.ma2.ArrayDouble;
+import ucar.ma2.ArrayFloat;
 import ucar.nc2.NetcdfFile;
 import ucar.nc2.Variable;
 
+import com.amazonaws.ClientConfiguration;
+import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.model.ListObjectsRequest;
+import com.amazonaws.services.s3.model.ObjectListing;
+import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.openresearchinc.hadoop.sequencefile.Util;
 import com.openresearchinc.hadoop.sequencefile.hdf5_getters;
 
 public class SequenceFileTest {
+	private final static Logger logger = Logger.getLogger(Util.class);
+	private final static ClientConfiguration config = new ClientConfiguration();// .withProxyHost("http_proxy").withProxyPort(80);
+	private final static AmazonS3 s3 = new AmazonS3Client(
+			new BasicAWSCredentials(System.getenv("AWS_ACCESS_KEY_ID"),
+					System.getenv("AWS_SECRET_KEY")), config);
+
+	@Test
+	/**
+	 *
+	 * @throws Exception
+	 */
+	public void testCopyRecursivelyFromS3() throws Exception {
+		String bucketName = "nasanex";
+		String prefix = "NEX-DCP30/BCSD/rcp26/mon/atmos/pr/r1i1p1/v1.0/";
+		String extension = "nc";
+
+		ListObjectsRequest listObjectsRequest = new ListObjectsRequest()
+				.withBucketName(bucketName).withPrefix(prefix);
+		ObjectListing objectListing;
+
+		do {
+			objectListing = s3.listObjects(listObjectsRequest);
+			for (S3ObjectSummary objectSummary : objectListing
+					.getObjectSummaries()) {
+				if (!objectSummary.getKey().endsWith(extension))
+					continue;
+				logger.info(" - " + objectSummary.getKey() + "  " + "(size = "
+						+ objectSummary.getSize() + ")");
+				String inputURI = "s3://" + bucketName + ".s3.amazonaws.com/"
+						+ prefix + objectSummary.getKey();
+				Util.writeToSequenceFile(inputURI, "hdfs://master:8020/"
+						+ prefix + objectSummary.getKey() + ".seq",
+						new SnappyCodec());//TODO have not tested on Hadoop yet.  
+			}
+			listObjectsRequest.setMarker(objectListing.getNextMarker());
+		} while (objectListing.isTruncated());
+	}
+
+	@Test
+	/**
+	 * Find min/max/average precipitation for a randomly-positioned but fixed-size region from a nc file
+	 * output: filename,origin,size key: value:min, max, average  
+	 * @throws Exception
+	 */
+	public void testProcessingNASANexData() throws Exception {
+		final int SIZE = 100;
+		File file = new File(this.getClass().getResource("/ncar.nc").getPath());
+		byte[] netcdfinbyte = FileUtils.readFileToByteArray(file);
+		NetcdfFile netCDFfile = NetcdfFile.openInMemory("inmemory.nc",
+				netcdfinbyte);// use any dummy filename for file in memory
+
+		Variable time = netCDFfile.findVariable("time");
+		ArrayDouble.D1 days = (ArrayDouble.D1) time.read();
+		Variable lat = netCDFfile.findVariable("lat");
+		if (lat == null) {
+			logger.error("Cannot find Variable latitude(lat)");
+			return;
+		}
+		ArrayFloat.D1 absolutelat = (ArrayFloat.D1) lat.read();
+		Variable lon = netCDFfile.findVariable("lon");
+		if (lon == null) {
+			logger.error("Cannot find Variable longitude(lon)");
+			return;
+		}
+		ArrayFloat.D1 absolutelon = (ArrayFloat.D1) lon.read();
+		Variable pres = netCDFfile.findVariable("pr");
+		if (pres == null) {
+			logger.error("Cannot find Variable precipitation(pr)");
+			return;
+		}
+
+		Random rand = new Random();
+		int orig_lat = rand.nextInt((int) lat.getSize());
+		orig_lat = Math.min(orig_lat, (int) (lat.getSize() - SIZE));
+		int orig_lon = rand.nextInt((int) lon.getSize());
+		orig_lon = Math.min(orig_lon, (int) (lon.getSize() - SIZE));
+
+		int[] origin = new int[] { 0, orig_lat, orig_lon };
+		int[] size = new int[] { 1, SIZE, SIZE };
+		ArrayFloat.D3 data3D = (ArrayFloat.D3) pres.read(origin, size);
+		double max = Double.NEGATIVE_INFINITY;
+		double min = Double.POSITIVE_INFINITY;
+		double sum = 0;
+		for (int j = 0; j < SIZE; j++) {
+			for (int k = 0; k < SIZE; k++) {
+				double current = data3D.get(0, j, k);
+				max = (current > max ? current : max);
+				min = (current < min ? current : min);
+				sum += current;
+			}
+		}
+		logger.info(days + "," + absolutelat.get(orig_lat) + ","
+				+ absolutelon.get(orig_lon) + "," + SIZE + ":" + min + ","
+				+ max + "," + sum / (SIZE * SIZE));
+	}
 
 	@Test
 	// Test support (indirect) open HDF5 file from memory using netcdf API
