@@ -11,23 +11,29 @@ package com.openresearchinc.hadoop.sequencefile;
 
 import java.io.BufferedInputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FileSystem.Statistics;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.SequenceFile.CompressionType;
+import org.apache.hadoop.io.SequenceFile.Writer;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.compress.BZip2Codec;
 import org.apache.hadoop.io.compress.CompressionCodec;
@@ -38,6 +44,7 @@ import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.log4j.Logger;
 
+import com.amazonaws.ClientConfiguration;
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
@@ -119,6 +126,11 @@ public class Util {
 		Text key = null;
 		BytesWritable value = null;
 
+		ClientConfiguration config = new ClientConfiguration(); // .withProxyHost("firewall").withProxyPort(80);
+		AmazonS3 s3Client = new AmazonS3Client(new BasicAWSCredentials(
+				System.getenv("AWS_ACCESS_KEY_ID"),
+				System.getenv("AWS_SECRET_KEY")), config);
+
 		if (inputURI.startsWith("file://")) {
 			inputFile = inputURI.substring(7, inputURI.length());
 			File dataFile = new File(inputFile);
@@ -130,10 +142,15 @@ public class Util {
 		} else if (inputURI.startsWith("s3://")) {
 			String[] args = inputURI.split("/");
 			String bucket = args[2].split("\\.")[0];
-			String object = args[3];
-			AmazonS3 s3Client = new AmazonS3Client(new BasicAWSCredentials(
-					System.getenv("AWS_ACCESS_KEY_ID"),
-					System.getenv("AWS_SECRET_KEY")));
+
+		} else if (inputURI.startsWith("s3://")) {
+			String[] args = inputURI.split("/");
+			String bucket = args[2].split("\\.")[0];
+			List<String> argsList = new LinkedList<String>(Arrays.asList(args));
+			argsList.remove(0);
+			argsList.remove(0);
+			argsList.remove(0);// trimming leading protocol and bucket
+			String object = StringUtils.join(argsList, "/");
 			GetObjectRequest request = new GetObjectRequest(bucket, object);
 			S3Object s3object = s3Client.getObject(request);
 			InputStream objectContent = s3object.getObjectContent();
@@ -150,6 +167,7 @@ public class Util {
 			key = new Text(inputURI);
 			bytes = org.apache.commons.io.IOUtils.toByteArray(in);
 			value = new BytesWritable(bytes);
+
 		} else {
 			System.exit(2); // TODO
 		}

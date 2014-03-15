@@ -3,6 +3,7 @@ package com.openresearchinc.hadoop.test;
 //Credit to blog:http://noushinb.blogspot.com/2013/04/reading-writing-hadoop-sequence-files.html
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.io.IOException;
@@ -21,6 +22,11 @@ import org.apache.hadoop.io.compress.Lz4Codec;
 import org.apache.hadoop.io.compress.SnappyCodec;
 import org.apache.log4j.Logger;
 import org.junit.Test;
+import org.opencv.core.Core;
+import org.opencv.core.Mat;
+import org.opencv.core.MatOfRect;
+import org.opencv.highgui.Highgui;
+import org.opencv.objdetect.CascadeClassifier;
 
 import ucar.ma2.Array;
 import ucar.ma2.ArrayDouble;
@@ -44,6 +50,82 @@ public class SequenceFileTest {
 	private final static AmazonS3 s3 = new AmazonS3Client(
 			new BasicAWSCredentials(System.getenv("AWS_ACCESS_KEY_ID"),
 					System.getenv("AWS_SECRET_KEY")), config);
+
+	@Test
+	public void testProcessingImageinMemory() throws Exception{
+		String imagePath = new File(this.getClass().getResource("/lena.png")
+				.getFile()).getAbsolutePath();
+		String inputURI="file://"+imagePath;
+		String outputURI="file://c:\\temp\\lena.png.seq";
+		Util.writeToSequenceFile(inputURI,outputURI, new DefaultCodec());
+	}
+	@Test
+	/**
+	 *  
+	 * @throws Exception
+	 */
+	public void testLocalOpenCVFaceDetection() throws Exception {
+		// Note: in eclipse, add user library (opencv),
+		// external build/opencv-248.jar to opencv user lib,
+		// point native library location to build/java/x86 or x64
+		System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
+		String faceClassifierPath = new File(this.getClass()
+				.getResource("/haarcascade_frontalface_default.xml").getFile())
+				.getAbsolutePath();
+		String eyeClassifierPath = new File(this.getClass()
+				.getResource("/haarcascade_eye.xml").getFile())
+				.getAbsolutePath();
+		String noseClassifierPath = new File(this.getClass()
+				.getResource("/haarcascade_mcs_nose.xml").getFile())
+				.getAbsolutePath();
+		String mouthClassifierPath = new File(this.getClass()
+				.getResource("/haarcascade_mcs_mouth.xml").getFile())
+				.getAbsolutePath();
+		String smileClassifierPath = new File(this.getClass()
+				.getResource("/haarcascade_smile.xml").getFile())
+				.getAbsolutePath();
+
+		String imagePath = new File(this.getClass().getResource("/lena.png")
+				.getFile()).getAbsolutePath();
+
+		Mat image = Highgui.imread(imagePath);
+
+		// Note: opencv can only work with absolute path on Windows
+		CascadeClassifier faceDetector = new CascadeClassifier(
+				faceClassifierPath);
+		// Detect faces in the image.
+		// MatOfRect is a special container class for Rect.
+		MatOfRect faceDetections = new MatOfRect();
+		faceDetector.detectMultiScale(image, faceDetections);
+		assertTrue(faceDetections.toArray().length >= 1);
+
+		// eyes
+		CascadeClassifier eyeDetector = new CascadeClassifier(eyeClassifierPath);
+		MatOfRect eyeDetections = new MatOfRect();
+		eyeDetector.detectMultiScale(image, eyeDetections);
+		assertTrue(eyeDetections.toArray().length >= 2);
+
+		// nose
+		CascadeClassifier noseDetector = new CascadeClassifier(
+				noseClassifierPath);
+		MatOfRect noseDetections = new MatOfRect();
+		noseDetector.detectMultiScale(image, noseDetections);
+		assertTrue(noseDetections.toArray().length >= 1);
+
+		// mouth
+		CascadeClassifier mouthDetector = new CascadeClassifier(
+				mouthClassifierPath);
+		MatOfRect mouthDetections = new MatOfRect();
+		mouthDetector.detectMultiScale(image, mouthDetections);
+		assertTrue(mouthDetections.toArray().length >= 1);
+
+		// smile
+		CascadeClassifier smileDetector = new CascadeClassifier(
+				smileClassifierPath);
+		MatOfRect smileDetections = new MatOfRect();
+		smileDetector.detectMultiScale(image, smileDetections);
+		assertTrue(smileDetections.toArray().length >= 1);
+	}
 
 	@Test
 	/**
@@ -71,7 +153,8 @@ public class SequenceFileTest {
 						+ prefix + objectSummary.getKey();
 				Util.writeToSequenceFile(inputURI, "hdfs://master:8020/"
 						+ prefix + objectSummary.getKey() + ".seq",
-						new SnappyCodec());//TODO have not tested on Hadoop yet.  
+						new SnappyCodec());// TODO have not tested on Hadoop
+											// yet.
 			}
 			listObjectsRequest.setMarker(objectListing.getNextMarker());
 		} while (objectListing.isTruncated());
