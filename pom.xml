@@ -11,9 +11,23 @@
 			<url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
 		</repository>
 		<repository>
+			<id>Maven central</id>
+			<url>http://repo1.maven.org/maven2/</url>
+		</repository>
+		<repository>
+			<id>javacpp</id>
+			<name>JavaCPP</name>
+			<url>http://maven2.javacpp.googlecode.com/git/</url>
+		</repository>
+		<repository>
 			<id>javacv</id>
 			<name>JavaCV</name>
 			<url>http://maven2.javacv.googlecode.com/git/</url>
+		</repository>
+		<repository>
+			<id>netbeans</id>
+			<name>NetBeans</name>
+			<url>http://bits.netbeans.org/maven2/</url>
 		</repository>
 	</repositories>
 
@@ -21,10 +35,13 @@
 		<resources>
 			<resource>
 				<directory>src/main/resources</directory>
-				<excludes>
-					<exclude>*.*</exclude>
-				</excludes>
-				<filtering>false</filtering>
+				<includes>
+					<include>*.xml</include>
+					<include>*.properties</include>
+					<include>*.png</include>
+					<include>*.nc</include>
+					<include>*.h5</include>
+				</includes>
 			</resource>
 		</resources>
 		<pluginManagement>
@@ -36,61 +53,27 @@
 						<target>1.7</target>
 					</configuration>
 				</plugin>
-
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-jar-plugin</artifactId>
-					<version>2.4</version>
-					<configuration>
-						<archive>
-							<manifest>
-								<addClasspath>true</addClasspath>
-								<mainClass>com.openresearchinc.hadoop.sequencefile.Util</mainClass>
-								<classpathPrefix>lib/</classpathPrefix>
-							</manifest>
-						</archive>
-					</configuration>
-				</plugin>
-
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-dependency-plugin</artifactId>
-					<version>2.5.1</version>
-					<executions>
-						<execution>
-							<id>copy-dependencies</id>
-							<phase>package</phase>
-							<goals>
-								<goal>copy-dependencies</goal>
-							</goals>
-							<configuration>
-								<includeGroupIds>log4j</includeGroupIds>
-								<outputDirectory>${project.build.directory}/dependency-jars/</outputDirectory>
-							</configuration>
-						</execution>
-					</executions>
-				</plugin>
-
 			</plugins>
 		</pluginManagement>
 	</build>
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<!-- <hadoop.version>2.0.0-cdh4.5.0</hadoop.version> obtain by running 
-			$hadoop version -->
 		<hadoop.version>2.2.0</hadoop.version> <!-- obtain by running $hadoop version -->
 		<junit.version>LATEST</junit.version>
 		<log4j.version>LATEST</log4j.version>
-		<spring.version>3.2.5.RELEASE</spring.version>
 	</properties>
 
 	<dependencies>
-		<!--  <dependency>
+		<!-- mvn install:install-file -DgroupId=local -DartifactId=opencv -Dversion=2.4.8 
+			-Dpackaging=jar -Dfile=./lib/opencv.jar <dependency> <groupId>local</groupId> 
+			<artifactId>opencv</artifactId> <version>2.4.8</version> </dependency> -->
+
+
+		<dependency>
 			<groupId>com.googlecode.javacv</groupId>
 			<artifactId>javacv</artifactId>
-			<version>LATEST</version>
-		</dependency> -->
-		
+			<version>0.7</version>
+		</dependency>
 		<dependency>
 			<groupId>com.amazonaws</groupId>
 			<artifactId>aws-java-sdk</artifactId>
@@ -133,10 +116,8 @@
 			<scope>provided</scope>
 		</dependency>
 		<!-- Logging -->
-		<dependency>
-			<groupId>log4j</groupId>
-			<artifactId>log4j</artifactId>
-			<version>${log4j.version}</version>
-		</dependency>
+		<!-- <dependency> <groupId>log4j</groupId> <artifactId>log4j</artifactId> 
+			<version>${log4j.version}</version> </dependency> <dependency> <groupId>org.slf4j</groupId> 
+			<artifactId>slf4j-simple</artifactId> <version>1.7.0</version> </dependency> -->
 	</dependencies>
 </project>

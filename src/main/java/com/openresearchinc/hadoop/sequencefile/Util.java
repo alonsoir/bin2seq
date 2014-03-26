@@ -11,29 +11,29 @@ package com.openresearchinc.hadoop.sequencefile;
 
 import java.io.BufferedInputStream;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.FileSystem.Statistics;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.SequenceFile.CompressionType;
-import org.apache.hadoop.io.SequenceFile.Writer;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.compress.BZip2Codec;
 import org.apache.hadoop.io.compress.CompressionCodec;
@@ -42,14 +42,17 @@ import org.apache.hadoop.io.compress.GzipCodec;
 import org.apache.hadoop.io.compress.SnappyCodec;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.ReflectionUtils;
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
 
 import com.amazonaws.ClientConfiguration;
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.model.GetObjectRequest;
+import com.amazonaws.services.s3.model.ListObjectsRequest;
+import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3Object;
+import com.amazonaws.services.s3.model.S3ObjectSummary;
 
 //@formatter:off
 /**
@@ -64,11 +67,17 @@ import com.amazonaws.services.s3.model.S3Object;
 
 public class Util {
 
-	private static Configuration conf = new Configuration();
-	private final static Logger logger = Logger.getLogger(Util.class);
+	private final static Configuration conf = new Configuration();
+	private static final Logger logger = org.slf4j.LoggerFactory
+			.getLogger(Util.class);
+	// private final static Logger logger = Logger.getLogger(Util.class);
+	private final static ClientConfiguration config = new ClientConfiguration();// .withProxyHost("firewall").withProxyPort(80);
+	public final static AmazonS3 s3Client = new AmazonS3Client(
+			new BasicAWSCredentials(System.getenv("AWS_ACCESS_KEY"),
+					System.getenv("AWS_SECRET_KEY")), config);
 
 	public static void main(String[] args) throws Exception {
-		String usage = "Usage: hadoop jar ./target/*.jar com.openresearchinc.hadoop.sequencefile.Util -in <input-uri> -out <output-uri> -codec <gzip|bz2|snappy>";
+		String usage = "Usage: hadoop jar ./target/bin2seq*.jar com.openresearchinc.hadoop.sequencefile.Util -in <input-uri> -out <output-uri> -codec <gzip|bz2|snappy>";
 		String inputURI = null, outputURI = null, codec = null;
 		CompressionCodec compression = null;
 		String[] otherArgs = new GenericOptionsParser(conf, args)
@@ -111,11 +120,60 @@ public class Util {
 			break;
 		case "default":
 			compression = new DefaultCodec();
+			break;
 		default:
 			System.err.println(usage);
 			System.exit(2);
 		}
-		Util.writeToSequenceFile(inputURI, outputURI, compression);
+
+		Pattern allfiles = Pattern.compile("/\\*.[A-Za-z0-9]+$");
+		Matcher matcher = allfiles.matcher(inputURI);
+		if (matcher.find()) {
+			String ext = FilenameUtils.getExtension(inputURI);
+			String path = FilenameUtils.getFullPathNoEndSeparator(inputURI);
+			List<String> URIs = listFiles(path, ext);
+			for (String uri : URIs) {
+				String filename = new File(uri).getName();
+				Util.writeToSequenceFile(uri, outputURI + "/" + filename
+						+ ".seq", compression);
+			}
+		} else {
+			String filename = new File(inputURI).getName();
+			Util.writeToSequenceFile(inputURI, outputURI + "/" + filename
+					+ ".seq", compression);
+		}
+	}
+
+	public static List<String> listFiles(String dir, String ext) {
+		List<String> uri = new ArrayList<String>();
+
+		if (dir.startsWith("s3://")) {
+			String[] args = dir.split("/");
+			String bucket = args[2].split("\\.")[0];
+			List<String> argsList = new LinkedList<String>(Arrays.asList(args));
+			argsList.remove(0);
+			argsList.remove(0);
+			argsList.remove(0);// trimming leading protocol and bucket
+			String prefix = StringUtils.join(argsList, "/");
+
+			ListObjectsRequest listObjectsRequest = new ListObjectsRequest()
+					.withBucketName(bucket).withPrefix(prefix);
+			ObjectListing objectListing;
+
+			do {
+				objectListing = s3Client.listObjects(listObjectsRequest);
+				for (S3ObjectSummary objectSummary : objectListing
+						.getObjectSummaries()) {
+					if (!objectSummary.getKey().endsWith(ext))
+						continue;
+					uri.add("s3://" + bucket + "/" + objectSummary.getKey());
+					logger.debug(" - " + objectSummary.getKey() + "  "
+							+ "(size = " + objectSummary.getSize() + ")");
+				}
+				listObjectsRequest.setMarker(objectListing.getNextMarker());
+			} while (objectListing.isTruncated());
+		}// TODO: other sources
+		return uri;
 	}
 
 	public static void writeToSequenceFile(String inputURI, String outputURI,
@@ -126,11 +184,6 @@ public class Util {
 		Text key = null;
 		BytesWritable value = null;
 
-		ClientConfiguration config = new ClientConfiguration(); // .withProxyHost("firewall").withProxyPort(80);
-		AmazonS3 s3Client = new AmazonS3Client(new BasicAWSCredentials(
-				System.getenv("AWS_ACCESS_KEY_ID"),
-				System.getenv("AWS_SECRET_KEY")), config);
-
 		if (inputURI.startsWith("file://")) {
 			inputFile = inputURI.substring(7, inputURI.length());
 			File dataFile = new File(inputFile);
@@ -139,10 +192,6 @@ public class Util {
 			bytes = FileUtils.readFileToByteArray(dataFile);
 			key = new Text(dataFile.getAbsolutePath());
 			value = new BytesWritable(bytes);
-		} else if (inputURI.startsWith("s3://")) {
-			String[] args = inputURI.split("/");
-			String bucket = args[2].split("\\.")[0];
-
 		} else if (inputURI.startsWith("s3://")) {
 			String[] args = inputURI.split("/");
 			String bucket = args[2].split("\\.")[0];
@@ -235,7 +284,10 @@ public class Util {
 			path = new Path(sequenceFileURI.replaceAll(
 					"hdfs://[a-z\\.\\:0-9]+", ""));
 		} else if (sequenceFileURI.startsWith("s3://")) {
-			System.exit(2); // TODO
+			conf.set("fs.s3.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY"));
+			conf.set("fs.s3.awsSecretAccessKey",
+					System.getenv("AWS_SECRET_KEY"));
+			path = new Path(sequenceFileURI);
 		} else if (sequenceFileURI.startsWith("file://")) {
 			path = new Path(sequenceFileURI.replaceAll("file://", ""));
 		} else {
@@ -249,7 +301,7 @@ public class Util {
 		BytesWritable value = (BytesWritable) ReflectionUtils.newInstance(
 				reader.getValueClass(), conf);
 		while (reader.next(key, value)) {
-			logger.info("key : " + key.toString() + " - value size: "
+			logger.debug("key : " + key.toString() + " - value size: "
 					+ value.getBytes().length);
 			map.put(key, value.getBytes());
 		}

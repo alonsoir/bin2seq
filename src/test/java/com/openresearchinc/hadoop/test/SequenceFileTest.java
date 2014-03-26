@@ -2,18 +2,25 @@ package com.openresearchinc.hadoop.test;
 
 //Credit to blog:http://noushinb.blogspot.com/2013/04/reading-writing-hadoop-sequence-files.html
 
+import static com.googlecode.javacv.cpp.opencv_core.cvClearMemStorage;
+import static com.googlecode.javacv.cpp.opencv_core.cvLoad;
+import static com.googlecode.javacv.cpp.opencv_objdetect.CV_HAAR_DO_CANNY_PRUNING;
+import static com.googlecode.javacv.cpp.opencv_objdetect.cvHaarDetectObjects;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
+
+import javax.imageio.ImageIO;
 
 import ncsa.hdf.object.h5.H5File;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.compress.BZip2Codec;
 import org.apache.hadoop.io.compress.DefaultCodec;
@@ -22,11 +29,6 @@ import org.apache.hadoop.io.compress.Lz4Codec;
 import org.apache.hadoop.io.compress.SnappyCodec;
 import org.apache.log4j.Logger;
 import org.junit.Test;
-import org.opencv.core.Core;
-import org.opencv.core.Mat;
-import org.opencv.core.MatOfRect;
-import org.opencv.highgui.Highgui;
-import org.opencv.objdetect.CascadeClassifier;
 
 import ucar.ma2.Array;
 import ucar.ma2.ArrayDouble;
@@ -34,31 +36,65 @@ import ucar.ma2.ArrayFloat;
 import ucar.nc2.NetcdfFile;
 import ucar.nc2.Variable;
 
-import com.amazonaws.ClientConfiguration;
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3Client;
-import com.amazonaws.services.s3.model.ListObjectsRequest;
-import com.amazonaws.services.s3.model.ObjectListing;
-import com.amazonaws.services.s3.model.S3ObjectSummary;
+import com.googlecode.javacpp.Loader;
+import com.googlecode.javacv.cpp.opencv_core.CvMemStorage;
+import com.googlecode.javacv.cpp.opencv_core.CvSeq;
+import com.googlecode.javacv.cpp.opencv_core.IplImage;
+import com.googlecode.javacv.cpp.opencv_objdetect;
+import com.googlecode.javacv.cpp.opencv_objdetect.CvHaarClassifierCascade;
+import com.openresearchinc.hadoop.sequencefile.OpenCV;
 import com.openresearchinc.hadoop.sequencefile.Util;
 import com.openresearchinc.hadoop.sequencefile.hdf5_getters;
 
 public class SequenceFileTest {
 	private final static Logger logger = Logger.getLogger(Util.class);
-	private final static ClientConfiguration config = new ClientConfiguration();// .withProxyHost("http_proxy").withProxyPort(80);
-	private final static AmazonS3 s3 = new AmazonS3Client(
-			new BasicAWSCredentials(System.getenv("AWS_ACCESS_KEY_ID"),
-					System.getenv("AWS_SECRET_KEY")), config);
+	private final static String hadoopMaster = "master:8020";
 
 	@Test
-	public void testProcessingImageinMemory() throws Exception{
-		String imagePath = new File(this.getClass().getResource("/lena.png")
-				.getFile()).getAbsolutePath();
-		String inputURI="file://"+imagePath;
-		String outputURI="file://c:\\temp\\lena.png.seq";
-		Util.writeToSequenceFile(inputURI,outputURI, new DefaultCodec());
+	public void testjavacv() throws Exception {
+		String faceClassifierPath = new File(this.getClass().getResource("/haarcascade_frontalface_alt.xml").getFile())
+				.getAbsolutePath();
+		BufferedImage rawimage = ImageIO.read(new File(this.getClass().getResource("/lena.png").getFile()));
+		IplImage origImg = IplImage.createFrom(rawimage);
+		CvMemStorage storage = CvMemStorage.create();
+		CvHaarClassifierCascade classifier = new CvHaarClassifierCascade(cvLoad(faceClassifierPath));
+		cvClearMemStorage(storage);
+		CvSeq faces = cvHaarDetectObjects(origImg, classifier, storage, 1.1, 3, CV_HAAR_DO_CANNY_PRUNING);
+		// Loop the number of faces found. Draw red box around face.
+		int total = faces.total();
+		logger.info("total=" + total);
 	}
+
+	@Test
+	/**
+	 * Encode a lena image into sequencefile, read from hdfs into memory, detect with opencv
+	 * 
+	 * -Djava.library.path=/home/heq/opencv/release/lib:/home/heq/hadoop-2.2.0/lib/native 
+	 * @throws Exception
+	 */
+	public void testProcessingImageInSequenceFile() throws Exception {
+		// System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
+
+		String imagePath = new File(this.getClass().getResource("/lena.png").getFile()).getAbsolutePath();
+		String inputURI = "file://" + imagePath;
+		String outputURI = "hdfs://" + hadoopMaster + "/tmp/lena.png.seq";
+
+		Util.writeToSequenceFile(inputURI, outputURI, new SnappyCodec());
+		// detect a single file, make it more test-able
+		// int faces = OpenCV.detectFace("s3://ori-tmp/lena.png.seq");
+		// assertTrue(faces >= 1);
+
+		int faces = OpenCV.detectFace(outputURI);
+		assertTrue(faces >= 1);
+		// detect all image files under hdfs dirs
+		// OpenCV.detectFace("hdfs://" + hadoopMaster + "/tmp", "seq");
+
+		// hadoop distcp hdfs://master:8020/tmp/lena.png.seq
+		// s3://ori-tmp/lena.png.seq
+		// faces = OpenCV.detectFace("s3://ori-tmp/lena.png.seq");
+		// assertTrue(faces >= 1);
+	}
+
 	@Test
 	/**
 	 *  
@@ -68,96 +104,31 @@ public class SequenceFileTest {
 		// Note: in eclipse, add user library (opencv),
 		// external build/opencv-248.jar to opencv user lib,
 		// point native library location to build/java/x86 or x64
-		System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
-		String faceClassifierPath = new File(this.getClass()
-				.getResource("/haarcascade_frontalface_default.xml").getFile())
-				.getAbsolutePath();
-		String eyeClassifierPath = new File(this.getClass()
-				.getResource("/haarcascade_eye.xml").getFile())
-				.getAbsolutePath();
-		String noseClassifierPath = new File(this.getClass()
-				.getResource("/haarcascade_mcs_nose.xml").getFile())
-				.getAbsolutePath();
-		String mouthClassifierPath = new File(this.getClass()
-				.getResource("/haarcascade_mcs_mouth.xml").getFile())
-				.getAbsolutePath();
-		String smileClassifierPath = new File(this.getClass()
-				.getResource("/haarcascade_smile.xml").getFile())
-				.getAbsolutePath();
 
-		String imagePath = new File(this.getClass().getResource("/lena.png")
-				.getFile()).getAbsolutePath();
-
-		Mat image = Highgui.imread(imagePath);
-
-		// Note: opencv can only work with absolute path on Windows
-		CascadeClassifier faceDetector = new CascadeClassifier(
-				faceClassifierPath);
-		// Detect faces in the image.
-		// MatOfRect is a special container class for Rect.
-		MatOfRect faceDetections = new MatOfRect();
-		faceDetector.detectMultiScale(image, faceDetections);
-		assertTrue(faceDetections.toArray().length >= 1);
-
-		// eyes
-		CascadeClassifier eyeDetector = new CascadeClassifier(eyeClassifierPath);
-		MatOfRect eyeDetections = new MatOfRect();
-		eyeDetector.detectMultiScale(image, eyeDetections);
-		assertTrue(eyeDetections.toArray().length >= 2);
-
-		// nose
-		CascadeClassifier noseDetector = new CascadeClassifier(
-				noseClassifierPath);
-		MatOfRect noseDetections = new MatOfRect();
-		noseDetector.detectMultiScale(image, noseDetections);
-		assertTrue(noseDetections.toArray().length >= 1);
-
-		// mouth
-		CascadeClassifier mouthDetector = new CascadeClassifier(
-				mouthClassifierPath);
-		MatOfRect mouthDetections = new MatOfRect();
-		mouthDetector.detectMultiScale(image, mouthDetections);
-		assertTrue(mouthDetections.toArray().length >= 1);
-
-		// smile
-		CascadeClassifier smileDetector = new CascadeClassifier(
-				smileClassifierPath);
-		MatOfRect smileDetections = new MatOfRect();
-		smileDetector.detectMultiScale(image, smileDetections);
-		assertTrue(smileDetections.toArray().length >= 1);
+		// String[] haar_configs = { "/haarcascade_frontalface_alt.xml",\
+		// "/haarcascade_eye.xml" }; //TODO
+		String[] haar_configs = { "/haarcascade_frontalface_alt.xml" };
+		for (String haar : haar_configs) {
+			File classifierFile = new File(OpenCV.class.getResource(haar).toURI());
+			Loader.load(opencv_objdetect.class);
+			CvHaarClassifierCascade classifier = new CvHaarClassifierCascade(cvLoad(classifierFile.getAbsolutePath()));
+			IplImage origImg = IplImage.createFrom(ImageIO.read(new File(this.getClass().getResource("/lena.png")
+					.getFile())));
+			CvMemStorage storage = CvMemStorage.create();
+			CvSeq faces = cvHaarDetectObjects(origImg, classifier, storage, 1.1, 3, CV_HAAR_DO_CANNY_PRUNING);
+			cvClearMemStorage(storage);
+			assertTrue(faces.total() >= 1);
+		}
 	}
 
 	@Test
 	/**
-	 *
+	 * List NASA OpenNex netCDF files under an randomly-selected folder
 	 * @throws Exception
 	 */
-	public void testCopyRecursivelyFromS3() throws Exception {
-		String bucketName = "nasanex";
-		String prefix = "NEX-DCP30/BCSD/rcp26/mon/atmos/pr/r1i1p1/v1.0/";
-		String extension = "nc";
-
-		ListObjectsRequest listObjectsRequest = new ListObjectsRequest()
-				.withBucketName(bucketName).withPrefix(prefix);
-		ObjectListing objectListing;
-
-		do {
-			objectListing = s3.listObjects(listObjectsRequest);
-			for (S3ObjectSummary objectSummary : objectListing
-					.getObjectSummaries()) {
-				if (!objectSummary.getKey().endsWith(extension))
-					continue;
-				logger.info(" - " + objectSummary.getKey() + "  " + "(size = "
-						+ objectSummary.getSize() + ")");
-				String inputURI = "s3://" + bucketName + ".s3.amazonaws.com/"
-						+ prefix + objectSummary.getKey();
-				Util.writeToSequenceFile(inputURI, "hdfs://master:8020/"
-						+ prefix + objectSummary.getKey() + ".seq",
-						new SnappyCodec());// TODO have not tested on Hadoop
-											// yet.
-			}
-			listObjectsRequest.setMarker(objectListing.getNextMarker());
-		} while (objectListing.isTruncated());
+	public void testListFilesRecursivelyFromS3() throws Exception {
+		List<String> ncfiles = Util.listFiles("s3://nasanex/NEX-DCP30/BCSD/rcp26/mon/atmos/pr/r1i1p1/v1.0/", "nc");
+		assertTrue(ncfiles.size() >= 100); // a lot
 	}
 
 	@Test
@@ -170,8 +141,8 @@ public class SequenceFileTest {
 		final int SIZE = 100;
 		File file = new File(this.getClass().getResource("/ncar.nc").getPath());
 		byte[] netcdfinbyte = FileUtils.readFileToByteArray(file);
-		NetcdfFile netCDFfile = NetcdfFile.openInMemory("inmemory.nc",
-				netcdfinbyte);// use any dummy filename for file in memory
+		// use any dummy filename for file in memory
+		NetcdfFile netCDFfile = NetcdfFile.openInMemory("inmemory.nc", netcdfinbyte);
 
 		Variable time = netCDFfile.findVariable("time");
 		ArrayDouble.D1 days = (ArrayDouble.D1) time.read();
@@ -213,9 +184,8 @@ public class SequenceFileTest {
 				sum += current;
 			}
 		}
-		logger.info(days + "," + absolutelat.get(orig_lat) + ","
-				+ absolutelon.get(orig_lon) + "," + SIZE + ":" + min + ","
-				+ max + "," + sum / (SIZE * SIZE));
+		logger.info(days + "," + absolutelat.get(orig_lat) + "," + absolutelon.get(orig_lon) + "," + SIZE + ":" + min
+				+ "," + max + "," + sum / (SIZE * SIZE));
 	}
 
 	@Test
@@ -223,17 +193,14 @@ public class SequenceFileTest {
 	// TODO: python
 	// http://stackoverflow.com/questions/16654251/can-h5py-load-a-file-from-a-byte-array-in-memory
 	public void testNetcdfToH5() throws Exception {
-		H5File h5 = hdf5_getters.hdf5_open_readonly(this.getClass()
-				.getResource("/TRAXLZU12903D05F94.h5").getPath());
+		H5File h5 = hdf5_getters.hdf5_open_readonly(this.getClass().getResource("/TRAXLZU12903D05F94.h5").getPath());
 		double h5_temp = hdf5_getters.get_tempo(h5);
 
-		File file = new File(this.getClass()
-				.getResource("/TRAXLZU12903D05F94.h5").getPath());
+		File file = new File(this.getClass().getResource("/TRAXLZU12903D05F94.h5").getPath());
 		byte[] netcdfinbyte = FileUtils.readFileToByteArray(file);
-		NetcdfFile netCDFfile = NetcdfFile.openInMemory("inmemory.h5",
-				netcdfinbyte);// use any dummy filename for file in memory
-		Variable var = (Variable) netCDFfile
-				.findVariable("/analysis/songs.tempo");
+
+		NetcdfFile netCDFfile = NetcdfFile.openInMemory("inmemory.h5", netcdfinbyte);
+		Variable var = (Variable) netCDFfile.findVariable("/analysis/songs.tempo");
 		Array content = var.read();// 1D array
 		double netcdf_tempo = content.getDouble(0); // 1 column only
 		assertEquals(h5_temp, netcdf_tempo, 0.001);
@@ -243,34 +210,23 @@ public class SequenceFileTest {
 	public void testReadnetCDFinSequnceFileFormat() throws IOException {
 
 		String path = this.getClass().getResource("/ncar.nc").getPath();
-		Util.writeToSequenceFile("file://" + path,
-				"hdfs://master:8020/tmp/ncar.seq", new DefaultCodec());
-		Map<Text, byte[]> netcdfsequnce = Util
-				.readSequenceFile("hdfs://master:8020/tmp/ncar.seq");
+		Util.writeToSequenceFile("file://" + path, "hdfs://" + hadoopMaster + "/tmp/ncar.seq", new DefaultCodec());
+		Map<Text, byte[]> netcdfsequnce = Util.readSequenceFile("hdfs://" + hadoopMaster + "/tmp/ncar.seq");
 		for (Map.Entry<Text, byte[]> entry : netcdfsequnce.entrySet()) {
-			NetcdfFile ncFile = NetcdfFile.openInMemory(entry.getKey()
-					.toString(), entry.getValue());
+			NetcdfFile ncFile = NetcdfFile.openInMemory(entry.getKey().toString(), entry.getValue());
 			assertEquals(ncFile.getDimensions().size(), 5);
 		}
 	}
 
 	@Test
 	public void testDataAdaptors() throws Exception {
-		Util.writeToSequenceFile("file:///etc/passwd",
-				"file:///tmp/passwd.seq", new DefaultCodec());
-		Map<Text, byte[]> passwd = Util
-				.readSequenceFile("file:///tmp/passwd.seq");
+		Util.writeToSequenceFile("file:///etc/passwd", "file:///tmp/passwd.seq", new DefaultCodec());
+		Map<Text, byte[]> passwd = Util.readSequenceFile("file:///tmp/passwd.seq");
 		for (Map.Entry<Text, byte[]> entry : passwd.entrySet()) {
 			assertEquals(entry.getKey().toString(), "/etc/passwd");
 		}
 	}
-
-	@Test
-	public void testConfig() {
-		Configuration conf = new Configuration();
-		Util.listHadoopConfiguration(conf);
-	}
-
+	
 	@Test
 	//@formatter:off
 	// get Hadoop source from http://apache.mirrors.tds.net/hadoop/common/stable/hadoop-2.2.0-src.tar.gz
@@ -281,35 +237,38 @@ public class SequenceFileTest {
 	//@formatter:on
 	public void testCodecs() throws Exception {
 		String path = this.getClass().getResource("/ncar.nc").getPath();
-		Util.writeToSequenceFile("file://" + path,
-				"hdfs://master:8020/tmp/ncar.seq", new GzipCodec());
-		Util.writeToSequenceFile("file://" + path,
-				"hdfs://master:8020/tmp/ncar.seq", new BZip2Codec());
-		Util.writeToSequenceFile("file://" + path,
-				"hdfs://master:8020/tmp/ncar.seq", new Lz4Codec());
-		Util.writeToSequenceFile("file://" + path,
-				"hdfs://master:8020/tmp/ncar.seq", new SnappyCodec());
+		Util.writeToSequenceFile("file://" + path, "hdfs://" + hadoopMaster + "/tmp/ncar.seq", new GzipCodec());
+		Util.writeToSequenceFile("file://" + path, "hdfs://" + hadoopMaster + "/tmp/ncar.seq", new BZip2Codec());
+		Util.writeToSequenceFile("file://" + path, "hdfs://" + hadoopMaster + "/tmp/ncar.seq", new Lz4Codec());
+		Util.writeToSequenceFile("file://" + path, "hdfs://" + hadoopMaster + "/tmp/ncar.seq", new SnappyCodec());
 	}
 
 	@Test
 	public void testListSequenceFile() throws Exception {
-		Util.listSequenceFileKeys("hdfs://master:8020/tmp/ncar.seq");
+		Util.writeToSequenceFile("file:///etc/passwd", "file:///tmp/passwd.seq", new DefaultCodec());
+		Util.listSequenceFileKeys("hdfs://" + hadoopMaster + "/tmp/passwd.seq");
 	}
 
 	@Test
 	public void testS3() throws Exception {
 
 		String inputURI = "http://nasanex.s3.amazonaws.com/NEX-DCP30/BCSD/rcp26/mon/atmos/pr/r1i1p1/v1.0/CONUS/pr_amon_BCSD_rcp26_r1i1p1_CONUS_HadGEM2-ES_200512-200512.nc";
-		Util.writeToSequenceFile(inputURI,
-				"hdfs://master:8020/tmp/nasa-nc.seq", new GzipCodec());
+		Util.writeToSequenceFile(inputURI, "hdfs://" + hadoopMaster + "/tmp/nasa-nc.seq", new GzipCodec());
 
 		String existingBucketName = "ori-tmp"; // dir
 		String keyName = "passwd"; // file
-		inputURI = "s3://" + existingBucketName + ".s3.amazonaws.com/"
-				+ keyName;
-		Util.writeToSequenceFile(inputURI, "file:///tmp/passwd.seq",
-				new GzipCodec());
-		Util.writeToSequenceFile(inputURI, "hdfs://master:8020/tmp/passwd.seq",
-				new SnappyCodec());
+		inputURI = "s3://" + existingBucketName + ".s3.amazonaws.com/" + keyName;
+		Util.writeToSequenceFile(inputURI, "file:///tmp/passwd.seq", new GzipCodec());
+		Util.writeToSequenceFile(inputURI, "hdfs://" + hadoopMaster + "/tmp/passwd.seq", new SnappyCodec());
+	}
+
+	@Test
+	public void testBatchEncoding() throws Exception {
+		List<String> ncfiles = Util.listFiles(
+				"s3://nasanex/MODIS/MOLT/MOD13Q1.005/2013.09.30/MOD13Q1.A2013273.h21v00.005.2013303115726.hdf", "hdf");
+		for (String uri : ncfiles) {
+			String output = new File(uri).getName();
+			Util.writeToSequenceFile(uri, "hdfs://" + hadoopMaster + "/tmp/" + output + ".seq", new DefaultCodec());
+		}
 	}
 }
