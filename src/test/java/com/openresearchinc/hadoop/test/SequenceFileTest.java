@@ -2,21 +2,13 @@ package com.openresearchinc.hadoop.test;
 
 //Credit to blog:http://noushinb.blogspot.com/2013/04/reading-writing-hadoop-sequence-files.html
 
-import static com.googlecode.javacv.cpp.opencv_core.cvClearMemStorage;
-import static com.googlecode.javacv.cpp.opencv_core.cvLoad;
-import static com.googlecode.javacv.cpp.opencv_objdetect.CV_HAAR_DO_CANNY_PRUNING;
-import static com.googlecode.javacv.cpp.opencv_objdetect.cvHaarDetectObjects;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import java.awt.image.BufferedImage;
 import java.io.File;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-
-import javax.imageio.ImageIO;
 
 import ncsa.hdf.object.h5.H5File;
 
@@ -36,12 +28,6 @@ import ucar.ma2.ArrayFloat;
 import ucar.nc2.NetcdfFile;
 import ucar.nc2.Variable;
 
-import com.googlecode.javacpp.Loader;
-import com.googlecode.javacv.cpp.opencv_core.CvMemStorage;
-import com.googlecode.javacv.cpp.opencv_core.CvSeq;
-import com.googlecode.javacv.cpp.opencv_core.IplImage;
-import com.googlecode.javacv.cpp.opencv_objdetect;
-import com.googlecode.javacv.cpp.opencv_objdetect.CvHaarClassifierCascade;
 import com.openresearchinc.hadoop.sequencefile.OpenCV;
 import com.openresearchinc.hadoop.sequencefile.Util;
 import com.openresearchinc.hadoop.sequencefile.hdf5_getters;
@@ -51,73 +37,121 @@ public class SequenceFileTest {
 	private final static String hadoopMaster = "master:8020";
 
 	@Test
-	public void testjavacv() throws Exception {
-		String faceClassifierPath = new File(this.getClass().getResource("/haarcascade_frontalface_alt.xml").getFile())
-				.getAbsolutePath();
-		BufferedImage rawimage = ImageIO.read(new File(this.getClass().getResource("/lena.png").getFile()));
-		IplImage origImg = IplImage.createFrom(rawimage);
-		CvMemStorage storage = CvMemStorage.create();
-		CvHaarClassifierCascade classifier = new CvHaarClassifierCascade(cvLoad(faceClassifierPath));
-		cvClearMemStorage(storage);
-		CvSeq faces = cvHaarDetectObjects(origImg, classifier, storage, 1.1, 3, CV_HAAR_DO_CANNY_PRUNING);
-		// Loop the number of faces found. Draw red box around face.
-		int total = faces.total();
-		logger.info("total=" + total);
+	public void testFaceDetectionInPPMFromS3() throws Exception {
+
+		// Util.writeToSequenceFile("file:///home/heq/colorferetsubset/00001/00001_930831_fa_a.ppm.bz2",
+		// "hdfs://"
+		// + hadoopMaster + "/tmp/00001_930831_fa_a.ppm.seq", new
+		// SnappyCodec());
+		// int facenum = OpenCV.detectFaceInPPM("hdfs://" + hadoopMaster +
+		// "/tmp/00001_930831_fa_a.ppm.seq");
+
+		// String inputURI = "file://" + new
+		// File(this.getClass().getResource("/lena.ppm").getFile()).getAbsolutePath();
+		// String inputURI = "file://"
+		// + new
+		// File(this.getClass().getResource("/00001_930831_fa_a.ppm").getFile()).getAbsolutePath();
+		// String outputURI = "hdfs://" + hadoopMaster + "/tmp/lena.ppm.seq";
+		String outputURI = "hdfs://" + hadoopMaster + "/tmp/00001_930831_fa_a.ppm.seq";
+		Util.writeToSequenceFile("s3://ori-colorferetsubset/00001/00001_930831_pr_a.ppm.bz2", outputURI,
+				new SnappyCodec());
+		int facenum = OpenCV.detectFaceInPPM(outputURI);		
+
+		/*
+		 * String faceClassifierPath = new
+		 * File(this.getClass().getResource("/haarcascade_frontalface_alt.xml"
+		 * ).getFile()) .getAbsolutePath(); byte[] bytes =
+		 * IOUtils.toByteArray(this
+		 * .getClass().getResourceAsStream("/lena.ppm")); ImageInputStream iis =
+		 * ImageIO.createImageInputStream(new ByteArrayInputStream(bytes));
+		 * BufferedImage rawimage = PPMImageReader.read(iis); IplImage origImg =
+		 * IplImage.createFrom(rawimage); CvMemStorage storage =
+		 * CvMemStorage.create(); CvHaarClassifierCascade classifier = new
+		 * CvHaarClassifierCascade(cvLoad(faceClassifierPath));
+		 * cvClearMemStorage(storage); CvSeq faces =
+		 * cvHaarDetectObjects(origImg, classifier, storage, 1.1, 3,
+		 * CV_HAAR_DO_CANNY_PRUNING); int total = faces.total();
+		 */
+
 	}
 
 	@Test
 	/**
-	 * Encode a lena image into sequencefile, read from hdfs into memory, detect with opencv
+	 * 1.	JaveCV Face Detect image in SequenceFile from S3://
+	 * 2.  	JaveCV Face Detect image in SequenceFile from hdfs://
 	 * 
 	 * -Djava.library.path=/home/heq/opencv/release/lib:/home/heq/hadoop-2.2.0/lib/native 
 	 * @throws Exception
 	 */
-	public void testProcessingImageInSequenceFile() throws Exception {
-		// System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
-
-		String imagePath = new File(this.getClass().getResource("/lena.png").getFile()).getAbsolutePath();
-		String inputURI = "file://" + imagePath;
-		String outputURI = "hdfs://" + hadoopMaster + "/tmp/lena.png.seq";
-
-		Util.writeToSequenceFile(inputURI, outputURI, new SnappyCodec());
-		// detect a single file, make it more test-able
-		// int faces = OpenCV.detectFace("s3://ori-tmp/lena.png.seq");
-		// assertTrue(faces >= 1);
-
-		int faces = OpenCV.detectFace(outputURI);
+	public void testJavaCVFaceDetection() throws Exception {
+		// prerequist: hadoop fs -cp hdfs://master:8020/tmp/lena.png.seq
+		// s3://ori-tmp/tmp.png.seq
+		int faces = OpenCV.detectFaceinPngJpgEtc("s3://ori-tmp/lena.png.seq");
 		assertTrue(faces >= 1);
-		// detect all image files under hdfs dirs
-		// OpenCV.detectFace("hdfs://" + hadoopMaster + "/tmp", "seq");
 
-		// hadoop distcp hdfs://master:8020/tmp/lena.png.seq
-		// s3://ori-tmp/lena.png.seq
-		// faces = OpenCV.detectFace("s3://ori-tmp/lena.png.seq");
-		// assertTrue(faces >= 1);
+		String inputURI = "file://" + new File(this.getClass().getResource("/lena.png").getFile()).getAbsolutePath();
+		String outputURI = "s3://ori-tmp/lena.png.seq";
+		outputURI = "hdfs://" + hadoopMaster + "/tmp/lena.png.seq";
+		Util.writeToSequenceFile(inputURI, outputURI, new SnappyCodec());
+		faces = OpenCV.detectFaceinPngJpgEtc(outputURI);
+		assertTrue(faces >= 1);
 	}
 
-	@Test
-	/**
-	 *  
-	 * @throws Exception
+	/*
+	 * @Test public void testLocalOpenCVFaceDetection() throws Exception {
+	 * String[] haar_configs = { "/haarcascade_frontalface_alt.xml" }; for
+	 * (String haar : haar_configs) { File classifierFile = new
+	 * File(OpenCV.class.getResource(haar).getFile()); CvHaarClassifierCascade
+	 * classifier = new
+	 * CvHaarClassifierCascade(cvLoad(classifierFile.getAbsolutePath()));
+	 * 
+	 * String path =
+	 * this.getClass().getResource("/00001_930831_fa_a.ppm").getPath();
+	 * BufferedImage image1 =
+	 * ImageIO.read(this.getClass().getResource("/00001_930831_fa_a.ppm"));
+	 * PPMFile ppmfile = new PPMFile(path); byte[] bytes = ppmfile.getBytes();
+	 * 
+	 * IplImage image = cvDecodeImage(cvMat(1, bytes.length, CV_8UC3, new
+	 * BytePointer(bytes)));
+	 * 
+	 * BytePointer rawImageData = new BytePointer(bytes); IplImage grayImage =
+	 * IplImage.createHeader(new CvSize(ppmfile.getWidth(),
+	 * ppmfile.getHeight()), IPL_DEPTH_8U, 3); cvSetData(grayImage,
+	 * rawImageData, ppmfile.getWidth() * 3);
+	 * 
+	 * CvMemStorage storage = CvMemStorage.create(); CvSeq faces =
+	 * cvHaarDetectObjects(grayImage, classifier, storage, 1.1, 3,
+	 * CV_HAAR_DO_CANNY_PRUNING); cvClearMemStorage(storage);
+	 * logger.info("faces=" + faces.total()); assertTrue(faces.total() >= 1); }
+	 * }
 	 */
-	public void testLocalOpenCVFaceDetection() throws Exception {
-		// Note: in eclipse, add user library (opencv),
-		// external build/opencv-248.jar to opencv user lib,
-		// point native library location to build/java/x86 or x64
 
-		// String[] haar_configs = { "/haarcascade_frontalface_alt.xml",\
-		// "/haarcascade_eye.xml" }; //TODO
-		String[] haar_configs = { "/haarcascade_frontalface_alt.xml" };
-		for (String haar : haar_configs) {
-			File classifierFile = new File(OpenCV.class.getResource(haar).toURI());
-			Loader.load(opencv_objdetect.class);
-			CvHaarClassifierCascade classifier = new CvHaarClassifierCascade(cvLoad(classifierFile.getAbsolutePath()));
-			IplImage origImg = IplImage.createFrom(ImageIO.read(new File(this.getClass().getResource("/lena.png")
-					.getFile())));
-			CvMemStorage storage = CvMemStorage.create();
-			CvSeq faces = cvHaarDetectObjects(origImg, classifier, storage, 1.1, 3, CV_HAAR_DO_CANNY_PRUNING);
-			cvClearMemStorage(storage);
-			assertTrue(faces.total() >= 1);
+	/*
+	 * @Test public void testJavaCVFaceDetectioninSequnceFile() throws Exception
+	 * { String faceClassifierPath = new
+	 * File(this.getClass().getResource("/haarcascade_frontalface_alt.xml"
+	 * ).getFile()) .getAbsolutePath();
+	 * 
+	 * Map<Text, byte[]> netcdfsequnce = Util.readSequenceFile("hdfs://" +
+	 * hadoopMaster + "/tmp/lena.png.seq"); for (Map.Entry<Text, byte[]> entry :
+	 * netcdfsequnce.entrySet()) { String filename = entry.getKey().toString();
+	 * BufferedImage image = ImageIO.read(new
+	 * ByteArrayInputStream(entry.getValue())); IplImage origImg =
+	 * IplImage.createFrom(image); CvMemStorage storage = CvMemStorage.create();
+	 * CvHaarClassifierCascade classifier = new
+	 * CvHaarClassifierCascade(cvLoad(faceClassifierPath));
+	 * cvClearMemStorage(storage); CvSeq faces = cvHaarDetectObjects(origImg,
+	 * classifier, storage, 1.1, 3, CV_HAAR_DO_CANNY_PRUNING);
+	 * logger.info("file=" + filename + "total=" + faces.total());
+	 * assertTrue(faces.total() >= 1); } }
+	 */
+
+	@Test
+	public void testBatchFaceDetection() throws Exception {
+		List<String> fileURIs = Util.listFiles("hdfs://master:8020/tmp/", "seq");
+		for (String uri : fileURIs) {
+			int faces = OpenCV.detectFaceInPPM(uri);
+			logger.info("faces=" + faces);
 		}
 	}
 
@@ -126,9 +160,16 @@ public class SequenceFileTest {
 	 * List NASA OpenNex netCDF files under an randomly-selected folder
 	 * @throws Exception
 	 */
-	public void testListFilesRecursivelyFromS3() throws Exception {
+	public void testListCopyFilesRecursivelyFromS3() throws Exception {
 		List<String> ncfiles = Util.listFiles("s3://nasanex/NEX-DCP30/BCSD/rcp26/mon/atmos/pr/r1i1p1/v1.0/", "nc");
 		assertTrue(ncfiles.size() >= 100); // a lot
+
+		List<String> fileUrls = Util.listFiles("s3://ori-colorferetsubset/", "bz2");
+		for (String url : fileUrls) {
+			logger.info(url);
+			String file = org.apache.commons.io.FilenameUtils.getBaseName(url);
+			Util.writeToSequenceFile(url, "hdfs://" + hadoopMaster + "/tmp/" + file + ".seq", new SnappyCodec());
+		}
 	}
 
 	@Test
@@ -137,7 +178,7 @@ public class SequenceFileTest {
 	 * output: filename,origin,size key: value:min, max, average  
 	 * @throws Exception
 	 */
-	public void testProcessingNASANexData() throws Exception {
+	public void testProcessingNASANexDataInNetCDF() throws Exception {
 		final int SIZE = 100;
 		File file = new File(this.getClass().getResource("/ncar.nc").getPath());
 		byte[] netcdfinbyte = FileUtils.readFileToByteArray(file);
@@ -192,7 +233,7 @@ public class SequenceFileTest {
 	// Test support (indirect) open HDF5 file from memory using netcdf API
 	// TODO: python
 	// http://stackoverflow.com/questions/16654251/can-h5py-load-a-file-from-a-byte-array-in-memory
-	public void testNetcdfToH5() throws Exception {
+	public void testNetCDFInterfaceToACcessH5() throws Exception {
 		H5File h5 = hdf5_getters.hdf5_open_readonly(this.getClass().getResource("/TRAXLZU12903D05F94.h5").getPath());
 		double h5_temp = hdf5_getters.get_tempo(h5);
 
@@ -207,7 +248,7 @@ public class SequenceFileTest {
 	}
 
 	@Test
-	public void testReadnetCDFinSequnceFileFormat() throws IOException {
+	public void testReadnetCDFinSequnceFileFormat() throws Exception {
 
 		String path = this.getClass().getResource("/ncar.nc").getPath();
 		Util.writeToSequenceFile("file://" + path, "hdfs://" + hadoopMaster + "/tmp/ncar.seq", new DefaultCodec());
@@ -219,14 +260,14 @@ public class SequenceFileTest {
 	}
 
 	@Test
-	public void testDataAdaptors() throws Exception {
+	public void testReadWriteFromNativeFSToHDFS() throws Exception {
 		Util.writeToSequenceFile("file:///etc/passwd", "file:///tmp/passwd.seq", new DefaultCodec());
 		Map<Text, byte[]> passwd = Util.readSequenceFile("file:///tmp/passwd.seq");
 		for (Map.Entry<Text, byte[]> entry : passwd.entrySet()) {
 			assertEquals(entry.getKey().toString(), "/etc/passwd");
 		}
 	}
-	
+
 	@Test
 	//@formatter:off
 	// get Hadoop source from http://apache.mirrors.tds.net/hadoop/common/stable/hadoop-2.2.0-src.tar.gz
@@ -235,7 +276,7 @@ public class SequenceFileTest {
 	// cp hadoop-common/target/native/target/usr/local/lib/libhadoop.so ~/hadoop-2.2.0/lib/native/.
 	// library -Djava.library.path=/home/heq/hadoop-2.2.0/lib/native
 	//@formatter:on
-	public void testCodecs() throws Exception {
+	public void testGzipBzip2Lz4SnappyCodecs() throws Exception {
 		String path = this.getClass().getResource("/ncar.nc").getPath();
 		Util.writeToSequenceFile("file://" + path, "hdfs://" + hadoopMaster + "/tmp/ncar.seq", new GzipCodec());
 		Util.writeToSequenceFile("file://" + path, "hdfs://" + hadoopMaster + "/tmp/ncar.seq", new BZip2Codec());
@@ -244,14 +285,13 @@ public class SequenceFileTest {
 	}
 
 	@Test
-	public void testListSequenceFile() throws Exception {
+	public void testListSequenceFileKey() throws Exception {
 		Util.writeToSequenceFile("file:///etc/passwd", "file:///tmp/passwd.seq", new DefaultCodec());
 		Util.listSequenceFileKeys("hdfs://" + hadoopMaster + "/tmp/passwd.seq");
 	}
 
 	@Test
-	public void testS3() throws Exception {
-
+	public void testCopyfromS3ViaHttpToHdfs() throws Exception {
 		String inputURI = "http://nasanex.s3.amazonaws.com/NEX-DCP30/BCSD/rcp26/mon/atmos/pr/r1i1p1/v1.0/CONUS/pr_amon_BCSD_rcp26_r1i1p1_CONUS_HadGEM2-ES_200512-200512.nc";
 		Util.writeToSequenceFile(inputURI, "hdfs://" + hadoopMaster + "/tmp/nasa-nc.seq", new GzipCodec());
 
@@ -263,7 +303,7 @@ public class SequenceFileTest {
 	}
 
 	@Test
-	public void testBatchEncoding() throws Exception {
+	public void testRecursiveCopyAndEncodingFromS3ToHdfs() throws Exception {
 		List<String> ncfiles = Util.listFiles(
 				"s3://nasanex/MODIS/MOLT/MOD13Q1.005/2013.09.30/MOD13Q1.A2013273.h21v00.005.2013303115726.hdf", "hdf");
 		for (String uri : ncfiles) {

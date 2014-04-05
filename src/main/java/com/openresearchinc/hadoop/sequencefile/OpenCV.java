@@ -9,12 +9,12 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
-import java.net.URL;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
 import javax.imageio.ImageIO;
+import javax.imageio.stream.ImageInputStream;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
@@ -25,14 +25,10 @@ import org.apache.hadoop.util.GenericOptionsParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.googlecode.javacpp.Loader;
 import com.googlecode.javacv.cpp.opencv_core.CvMemStorage;
 import com.googlecode.javacv.cpp.opencv_core.CvSeq;
 import com.googlecode.javacv.cpp.opencv_core.IplImage;
-import com.googlecode.javacv.cpp.opencv_objdetect;
 import com.googlecode.javacv.cpp.opencv_objdetect.CvHaarClassifierCascade;
-
-//import javax.imageio.ImageIO;
 
 /**
  * cp <opencv-path>/release/lib/libopencv_java248.so <hadoop-path>/lib/native/.
@@ -56,7 +52,12 @@ public class OpenCV {
 			System.err.println(usage);
 			System.exit(2);
 		}
-		detectFace(otherArgs[pos + 1]);
+		String uri = otherArgs[pos + 1];
+		if (uri.toLowerCase().contains(".png") || uri.toLowerCase().contains(".jpg")) {
+			detectFaceinPngJpgEtc(uri);
+		} else if (uri.contains(".ppm")) {
+			detectFaceInPPM(uri);
+		}
 	}
 
 	/**
@@ -69,7 +70,6 @@ public class OpenCV {
 	 *            e.g., seq, standard for image file in sequencefile format.
 	 * @throws IOException
 	 **/
-
 	public static void detectFace(String hdfsdir, String ext) throws Exception {
 		if (hdfsdir.contains("hdfs://")) {
 			conf.set("fs.defaultFS", hdfsdir);
@@ -78,40 +78,87 @@ public class OpenCV {
 				Path path = status[i].getPath();
 				if (path.getName().endsWith(ext) && status[i].getLen() > 0 && !status[i].isSymlink()) {
 					logger.debug(status[i].getPath() + " " + status[i].getLen());
-					detectFace(path.toString());
+					detectFaceinPngJpgEtc(path.toString());
 				}
 			}
 		} else if (hdfsdir.contains("s3://")) {
 			List<String> sequris = Util.listFiles(hdfsdir, "seq");
 			for (String uri : sequris) {
-				detectFace(uri);
+				detectFaceinPngJpgEtc(uri);
 			}
 		}
 	}
 
-	public static int detectFace(String uri) throws Exception {
+	/**
+	 * Detect face from image in PNG, JPG, BMP etc. where supported by Jave
+	 * ImageIO out-of-box
+	 * 
+	 * @param uri
+	 * @return
+	 * @throws Exception
+	 */
+	public static int detectFaceinPngJpgEtc(String uri) throws Exception {
 		Map<Text, byte[]> imagesequnce = Util.readSequenceFile(uri);
-
 		for (Map.Entry<Text, byte[]> entry : imagesequnce.entrySet()) {
 			String filename = entry.getKey().toString();
 			BufferedImage rawimage = ImageIO.read(new ByteArrayInputStream(entry.getValue()));
-			if (rawimage == null) { // not an image
-				logger.warn("not an image");
-				return 0;
-			}
-
-			// File file = Loader.extractResource(
-			// OpenCV.class.getClassLoader().getResource("haarcascade_frontalface_alt.xml").toURI().toURL(),
-			// null,
-			// "classifier", ".xml");
-			CvHaarClassifierCascade classifier = new CvHaarClassifierCascade(cvLoad("haarcascade_frontalface_alt.xml"));
-			IplImage origImg = IplImage.createFrom(rawimage);
-			CvMemStorage storage = CvMemStorage.create();
-			CvSeq faces = cvHaarDetectObjects(origImg, classifier, storage, 1.1, 3, CV_HAAR_DO_CANNY_PRUNING);
-			cvClearMemStorage(storage);
-			logger.info("file=" + filename + ": # faces=" + faces.total());
-			return faces.total();
+			int faces = detectFace(rawimage);
+			logger.info("filename=" + filename + "faces=" + faces);
+			return faces;
 		}
 		return 0;
 	}
+
+	/**
+	 * Detect face from image in PPM format
+	 * 
+	 * @param uri
+	 * @return
+	 * @throws Exception
+	 */
+	public static int detectFaceInPPM(String uri) throws Exception {
+		Map<Text, byte[]> imagesequnce = Util.readSequenceFile(uri);
+		for (Map.Entry<Text, byte[]> entry : imagesequnce.entrySet()) {
+			String filename = entry.getKey().toString();			
+			ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(entry.getValue()));
+			BufferedImage rawimage = PPMImageReader.read(iis);
+			int faces = detectFace(rawimage);
+			logger.debug("filename=" + filename + "faces=" + faces);
+			return faces;
+		}
+		return 0;
+	}
+
+	static int detectFace(BufferedImage rawimage) throws Exception {
+		String faceClassifierPath = new File(OpenCV.class.getResource("/haarcascade_frontalface_alt.xml").getFile())
+				.getAbsolutePath();
+
+		CvHaarClassifierCascade classifier = new CvHaarClassifierCascade(cvLoad(faceClassifierPath));
+		IplImage origImg = IplImage.createFrom(rawimage);
+		CvMemStorage storage = CvMemStorage.create();
+		CvSeq faces = cvHaarDetectObjects(origImg, classifier, storage, 1.1, 3, CV_HAAR_DO_CANNY_PRUNING);
+		cvClearMemStorage(storage);
+		logger.info("# faces=" + faces.total());
+		return faces.total();
+	}
+
+	/*
+	 * public static int detectFace(String uri) throws Exception { String
+	 * faceClassifierPath = new
+	 * File(OpenCV.class.getResource("/haarcascade_frontalface_alt.xml"
+	 * ).getFile()) .getAbsolutePath(); Map<Text, byte[]> imagesequnce =
+	 * Util.readSequenceFile(uri);
+	 * 
+	 * for (Map.Entry<Text, byte[]> entry : imagesequnce.entrySet()) { String
+	 * filename = entry.getKey().toString(); BufferedImage rawimage =
+	 * ImageIO.read(new ByteArrayInputStream(entry.getValue())); if (rawimage ==
+	 * null) { // not an image logger.warn("not an image"); return 0; }
+	 * CvHaarClassifierCascade classifier = new
+	 * CvHaarClassifierCascade(cvLoad(faceClassifierPath)); IplImage origImg =
+	 * IplImage.createFrom(rawimage); CvMemStorage storage =
+	 * CvMemStorage.create(); CvSeq faces = cvHaarDetectObjects(origImg,
+	 * classifier, storage, 1.1, 3, CV_HAAR_DO_CANNY_PRUNING);
+	 * cvClearMemStorage(storage); logger.info("file=" + filename + ": # faces="
+	 * + faces.total()); return faces.total(); } return 0; }
+	 */
 }
