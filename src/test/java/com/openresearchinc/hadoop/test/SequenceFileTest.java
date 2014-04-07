@@ -33,46 +33,22 @@ import com.openresearchinc.hadoop.sequencefile.Util;
 import com.openresearchinc.hadoop.sequencefile.hdf5_getters;
 
 public class SequenceFileTest {
-	private final static Logger logger = Logger.getLogger(Util.class);
-	private final static String hadoopMaster = "master:8020";
+	private final static Logger logger = Logger.getLogger(SequenceFileTest.class);
+	private final static String hadoopMaster = "master:8020"; //host or FQDN of Hadoop namenode
 
 	@Test
+	/**
+	 *  Test image in compressed PPM format as used in NIST Colorferet database 
+	 *  Eclipse: -Djava.library.path=/home/heq/hadoop-2.2.0/lib/native
+	 * @throws Exception
+	 */
 	public void testFaceDetectionInPPMFromS3() throws Exception {
-
-		// Util.writeToSequenceFile("file:///home/heq/colorferetsubset/00001/00001_930831_fa_a.ppm.bz2",
-		// "hdfs://"
-		// + hadoopMaster + "/tmp/00001_930831_fa_a.ppm.seq", new
-		// SnappyCodec());
-		// int facenum = OpenCV.detectFaceInPPM("hdfs://" + hadoopMaster +
-		// "/tmp/00001_930831_fa_a.ppm.seq");
-
-		// String inputURI = "file://" + new
-		// File(this.getClass().getResource("/lena.ppm").getFile()).getAbsolutePath();
-		// String inputURI = "file://"
-		// + new
-		// File(this.getClass().getResource("/00001_930831_fa_a.ppm").getFile()).getAbsolutePath();
-		// String outputURI = "hdfs://" + hadoopMaster + "/tmp/lena.ppm.seq";
-		String outputURI = "hdfs://" + hadoopMaster + "/tmp/00001_930831_fa_a.ppm.seq";
-		Util.writeToSequenceFile("s3://ori-colorferetsubset/00001/00001_930831_pr_a.ppm.bz2", outputURI,
-				new SnappyCodec());
-		int facenum = OpenCV.detectFaceInPPM(outputURI);		
-
-		/*
-		 * String faceClassifierPath = new
-		 * File(this.getClass().getResource("/haarcascade_frontalface_alt.xml"
-		 * ).getFile()) .getAbsolutePath(); byte[] bytes =
-		 * IOUtils.toByteArray(this
-		 * .getClass().getResourceAsStream("/lena.ppm")); ImageInputStream iis =
-		 * ImageIO.createImageInputStream(new ByteArrayInputStream(bytes));
-		 * BufferedImage rawimage = PPMImageReader.read(iis); IplImage origImg =
-		 * IplImage.createFrom(rawimage); CvMemStorage storage =
-		 * CvMemStorage.create(); CvHaarClassifierCascade classifier = new
-		 * CvHaarClassifierCascade(cvLoad(faceClassifierPath));
-		 * cvClearMemStorage(storage); CvSeq faces =
-		 * cvHaarDetectObjects(origImg, classifier, storage, 1.1, 3,
-		 * CV_HAAR_DO_CANNY_PRUNING); int total = faces.total();
-		 */
-
+		String file="00001_930831_hl_a.ppm";
+		String inputURI = "s3://ori-colorferetsubset/00001/"+file+".bz2";
+		String outputURI = "hdfs://" + hadoopMaster + "/tmp/"+file+".seq";
+		Util.writeToSequenceFile(inputURI, outputURI, new SnappyCodec());
+		int faces = OpenCV.detectFaceInPPM(outputURI);
+		assertTrue(faces == 1);
 	}
 
 	@Test
@@ -80,79 +56,29 @@ public class SequenceFileTest {
 	 * 1.	JaveCV Face Detect image in SequenceFile from S3://
 	 * 2.  	JaveCV Face Detect image in SequenceFile from hdfs://
 	 * 
-	 * -Djava.library.path=/home/heq/opencv/release/lib:/home/heq/hadoop-2.2.0/lib/native 
+	 * Eclipse: -Djava.library.path=/home/heq/hadoop-2.2.0/lib/native 
 	 * @throws Exception
 	 */
-	public void testJavaCVFaceDetection() throws Exception {
-		// prerequist: hadoop fs -cp hdfs://master:8020/tmp/lena.png.seq
-		// s3://ori-tmp/tmp.png.seq
-		int faces = OpenCV.detectFaceinPngJpgEtc("s3://ori-tmp/lena.png.seq");
-		assertTrue(faces >= 1);
-
+	public void testJavaCVFaceDetectionFromHdfsSequenceFile() throws Exception {
 		String inputURI = "file://" + new File(this.getClass().getResource("/lena.png").getFile()).getAbsolutePath();
-		String outputURI = "s3://ori-tmp/lena.png.seq";
-		outputURI = "hdfs://" + hadoopMaster + "/tmp/lena.png.seq";
-		Util.writeToSequenceFile(inputURI, outputURI, new SnappyCodec());
-		faces = OpenCV.detectFaceinPngJpgEtc(outputURI);
-		assertTrue(faces >= 1);
+
+		// Before hdfs over HDFS is implemented, do $hadoop fs -cp
+		// hdfs://<path>/tmp/lena.png.seq s3://ori-tmp/lena.png.seq
+		String s3URI = "s3://ori-tmp/lena.png.seq";
+		// Util.writeToSequenceFile(inputURI, s3URI, new SnappyCodec()); //TODO:
+		int faces = OpenCV.detectFaceinPngJpgEtc(s3URI);
+		assertTrue(faces == 1);
+
+		String hdfsURI = "hdfs://" + hadoopMaster + "/tmp/lena.png.seq";
+		Util.writeToSequenceFile(inputURI, hdfsURI, new SnappyCodec());
+		faces = OpenCV.detectFaceinPngJpgEtc(hdfsURI);
+		assertTrue(faces == 1);
 	}
-
-	/*
-	 * @Test public void testLocalOpenCVFaceDetection() throws Exception {
-	 * String[] haar_configs = { "/haarcascade_frontalface_alt.xml" }; for
-	 * (String haar : haar_configs) { File classifierFile = new
-	 * File(OpenCV.class.getResource(haar).getFile()); CvHaarClassifierCascade
-	 * classifier = new
-	 * CvHaarClassifierCascade(cvLoad(classifierFile.getAbsolutePath()));
-	 * 
-	 * String path =
-	 * this.getClass().getResource("/00001_930831_fa_a.ppm").getPath();
-	 * BufferedImage image1 =
-	 * ImageIO.read(this.getClass().getResource("/00001_930831_fa_a.ppm"));
-	 * PPMFile ppmfile = new PPMFile(path); byte[] bytes = ppmfile.getBytes();
-	 * 
-	 * IplImage image = cvDecodeImage(cvMat(1, bytes.length, CV_8UC3, new
-	 * BytePointer(bytes)));
-	 * 
-	 * BytePointer rawImageData = new BytePointer(bytes); IplImage grayImage =
-	 * IplImage.createHeader(new CvSize(ppmfile.getWidth(),
-	 * ppmfile.getHeight()), IPL_DEPTH_8U, 3); cvSetData(grayImage,
-	 * rawImageData, ppmfile.getWidth() * 3);
-	 * 
-	 * CvMemStorage storage = CvMemStorage.create(); CvSeq faces =
-	 * cvHaarDetectObjects(grayImage, classifier, storage, 1.1, 3,
-	 * CV_HAAR_DO_CANNY_PRUNING); cvClearMemStorage(storage);
-	 * logger.info("faces=" + faces.total()); assertTrue(faces.total() >= 1); }
-	 * }
-	 */
-
-	/*
-	 * @Test public void testJavaCVFaceDetectioninSequnceFile() throws Exception
-	 * { String faceClassifierPath = new
-	 * File(this.getClass().getResource("/haarcascade_frontalface_alt.xml"
-	 * ).getFile()) .getAbsolutePath();
-	 * 
-	 * Map<Text, byte[]> netcdfsequnce = Util.readSequenceFile("hdfs://" +
-	 * hadoopMaster + "/tmp/lena.png.seq"); for (Map.Entry<Text, byte[]> entry :
-	 * netcdfsequnce.entrySet()) { String filename = entry.getKey().toString();
-	 * BufferedImage image = ImageIO.read(new
-	 * ByteArrayInputStream(entry.getValue())); IplImage origImg =
-	 * IplImage.createFrom(image); CvMemStorage storage = CvMemStorage.create();
-	 * CvHaarClassifierCascade classifier = new
-	 * CvHaarClassifierCascade(cvLoad(faceClassifierPath));
-	 * cvClearMemStorage(storage); CvSeq faces = cvHaarDetectObjects(origImg,
-	 * classifier, storage, 1.1, 3, CV_HAAR_DO_CANNY_PRUNING);
-	 * logger.info("file=" + filename + "total=" + faces.total());
-	 * assertTrue(faces.total() >= 1); } }
-	 */
+	
 
 	@Test
-	public void testBatchFaceDetection() throws Exception {
-		List<String> fileURIs = Util.listFiles("hdfs://master:8020/tmp/", "seq");
-		for (String uri : fileURIs) {
-			int faces = OpenCV.detectFaceInPPM(uri);
-			logger.info("faces=" + faces);
-		}
+	public void testBatchFaceDetectionFromHDFS() throws Exception {
+		OpenCV.detectFacesInDir("hdfs://master:8020/tmp/","ppm.seq");
 	}
 
 	@Test
@@ -160,7 +86,7 @@ public class SequenceFileTest {
 	 * List NASA OpenNex netCDF files under an randomly-selected folder
 	 * @throws Exception
 	 */
-	public void testListCopyFilesRecursivelyFromS3() throws Exception {
+	public void testCopyFilesRecursivelyFromS3() throws Exception {
 		List<String> ncfiles = Util.listFiles("s3://nasanex/NEX-DCP30/BCSD/rcp26/mon/atmos/pr/r1i1p1/v1.0/", "nc");
 		assertTrue(ncfiles.size() >= 100); // a lot
 
@@ -230,9 +156,11 @@ public class SequenceFileTest {
 	}
 
 	@Test
-	// Test support (indirect) open HDF5 file from memory using netcdf API
-	// TODO: python
-	// http://stackoverflow.com/questions/16654251/can-h5py-load-a-file-from-a-byte-array-in-memory
+	/** Test support (indirect) open HDF5 file from memory using netcdf API
+	 * -Djava.library.path=/usr/lib/jni/libjhdf5.so
+	 * TODO: python API: http://stackoverflow.com/questions/16654251/can-h5py-load-a-file-from-a-byte-array-in-memory
+	 * @throws Exception
+	 */	
 	public void testNetCDFInterfaceToACcessH5() throws Exception {
 		H5File h5 = hdf5_getters.hdf5_open_readonly(this.getClass().getResource("/TRAXLZU12903D05F94.h5").getPath());
 		double h5_temp = hdf5_getters.get_tempo(h5);

@@ -14,8 +14,10 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigInteger;
 import java.net.URI;
 import java.net.URL;
+import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -222,7 +224,7 @@ public class Util {
 			InputStream objectContent = s3object.getObjectContent();
 			bytes = org.apache.commons.io.IOUtils.toByteArray(objectContent);
 			objectContent.close();
-
+			
 			byte[] uncompressed = null;
 			if (inputURI.endsWith("bz2")) {
 				uncompressed = unBZip2(bytes);
@@ -250,7 +252,8 @@ public class Util {
 			}// only useful in eclipse, no need if running hadoop jar
 			outpath = new Path(outputURI.replaceAll("hdfs://[a-z\\.\\:0-9]+", ""));
 		} else if (outputURI.startsWith("s3://")) {
-			System.exit(2); // TODO
+			//assume hdfs over hdfs
+			System.exit(2); // TODO			
 		} else if (outputURI.startsWith("file://")) {
 			outpath = new Path(outputURI.replaceAll("file://", ""));
 		} else {

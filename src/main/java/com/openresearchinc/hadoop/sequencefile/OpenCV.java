@@ -9,6 +9,8 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.math.BigInteger;
+import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -30,33 +32,66 @@ import com.googlecode.javacv.cpp.opencv_core.CvSeq;
 import com.googlecode.javacv.cpp.opencv_core.IplImage;
 import com.googlecode.javacv.cpp.opencv_objdetect.CvHaarClassifierCascade;
 
+//@formatter:off
 /**
- * cp <opencv-path>/release/lib/libopencv_java248.so <hadoop-path>/lib/native/.
- * otherwise will get following problem java.lang.UnsatisfiedLinkError: no
- * opencv_java248 in java.library.path
+ * (Deprecated) OpenCV 
+ * cp  <opencv-path>/release/lib/libopencv_java248.so 
+ *            <hadoop-path>/lib/native/. otherwise will get following problem
+ *            java.lang.UnsatisfiedLinkError: no opencv_java248 in
+ *            java.library.path
+ * 
+ * JavaCV: 
+ * 1. download and extract both javacv-0.7-bin.zip andjavacv-0.7-cppjars.zip 
+ * 2. In Eclipse: create a user library JavaCV containing 
+ * 		1)javacv.jar 2)javacpp.jar 3) javacv-<plaform>-<os>.jar 4) ffmpeg-<ver>-<platform>.jar 5) opencv-<ver>-<platform>.jar 
  * 
  * @author heq
- * 
  */
+//@formatter:on
 public class OpenCV {
 	private static final Logger logger = LoggerFactory.getLogger(OpenCV.class);
 	private static final Configuration conf = new Configuration();
 
 	public static void main(String[] args) throws Exception {
-		String usage = "Usage: hadoop jar ./target/*.jar com.openresearchinc.hadoop.sequencefile.OpenCV -in <input-uri-image> ";
+		String usage = "Usage: hadoop jar ./target/*.jar com.openresearchinc.hadoop.sequencefile.OpenCV [-file <input-uri-image>|-dir <input-uri-images>] -ext <ext> ";
 		String[] otherArgs = new GenericOptionsParser(conf, args).getRemainingArgs();
 
 		List<String> argList = Arrays.asList(otherArgs);
-		int pos = argList.indexOf("-in");
-		if (pos == -1) {
+		String uri;		
+		if (argList.indexOf("-file") != -1) {
+			uri = otherArgs[argList.indexOf("-file") + 1];
+			if (uri.toLowerCase().matches(".*png.*|.*jpg.*|.*gif.*")) {
+				detectFaceinPngJpgEtc(uri);
+			} else if (uri.toLowerCase().matches(".*ppm.*")) {
+				detectFaceInPPM(uri);
+			}else{
+				System.err.println("unsupported image format");
+				System.exit(2);				
+			}				
+		}else if (argList.indexOf("-dir") != -1) {
+			uri = otherArgs[argList.indexOf("-dir") + 1];
+			if (argList.indexOf("-ext") !=-1){				
+				String ext= otherArgs[argList.indexOf("-ext") + 1];
+				detectFacesInDir(uri,ext);
+			}else{
+				System.err.println(usage);
+				System.exit(2);				
+			}
+		}else{
 			System.err.println(usage);
-			System.exit(2);
+			System.exit(2);			
 		}
-		String uri = otherArgs[pos + 1];
-		if (uri.toLowerCase().contains(".png") || uri.toLowerCase().contains(".jpg")) {
-			detectFaceinPngJpgEtc(uri);
-		} else if (uri.contains(".ppm")) {
-			detectFaceInPPM(uri);
+	}
+
+	public static void detectFacesInDir(String dir, String ext) throws Exception {
+		List<String> fileURIs = Util.listFiles(dir, ext);
+		for (String uri : fileURIs) {
+			logger.info(uri);
+			if (uri.toLowerCase().matches(".*png.*|.*jpg.*|.*gif.*")) {
+				detectFaceinPngJpgEtc(uri);
+			} else if (uri.toLowerCase().matches(".*ppm.*")) {
+				detectFaceInPPM(uri);
+			}
 		}
 	}
 
@@ -103,7 +138,7 @@ public class OpenCV {
 			String filename = entry.getKey().toString();
 			BufferedImage rawimage = ImageIO.read(new ByteArrayInputStream(entry.getValue()));
 			int faces = detectFace(rawimage);
-			logger.info("filename=" + filename + "faces=" + faces);
+			logger.info("filename=" + filename + " faces=" + faces);
 			return faces;
 		}
 		return 0;
@@ -119,7 +154,7 @@ public class OpenCV {
 	public static int detectFaceInPPM(String uri) throws Exception {
 		Map<Text, byte[]> imagesequnce = Util.readSequenceFile(uri);
 		for (Map.Entry<Text, byte[]> entry : imagesequnce.entrySet()) {
-			String filename = entry.getKey().toString();			
+			String filename = entry.getKey().toString();
 			ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(entry.getValue()));
 			BufferedImage rawimage = PPMImageReader.read(iis);
 			int faces = detectFace(rawimage);
@@ -142,23 +177,4 @@ public class OpenCV {
 		return faces.total();
 	}
 
-	/*
-	 * public static int detectFace(String uri) throws Exception { String
-	 * faceClassifierPath = new
-	 * File(OpenCV.class.getResource("/haarcascade_frontalface_alt.xml"
-	 * ).getFile()) .getAbsolutePath(); Map<Text, byte[]> imagesequnce =
-	 * Util.readSequenceFile(uri);
-	 * 
-	 * for (Map.Entry<Text, byte[]> entry : imagesequnce.entrySet()) { String
-	 * filename = entry.getKey().toString(); BufferedImage rawimage =
-	 * ImageIO.read(new ByteArrayInputStream(entry.getValue())); if (rawimage ==
-	 * null) { // not an image logger.warn("not an image"); return 0; }
-	 * CvHaarClassifierCascade classifier = new
-	 * CvHaarClassifierCascade(cvLoad(faceClassifierPath)); IplImage origImg =
-	 * IplImage.createFrom(rawimage); CvMemStorage storage =
-	 * CvMemStorage.create(); CvSeq faces = cvHaarDetectObjects(origImg,
-	 * classifier, storage, 1.1, 3, CV_HAAR_DO_CANNY_PRUNING);
-	 * cvClearMemStorage(storage); logger.info("file=" + filename + ": # faces="
-	 * + faces.total()); return faces.total(); } return 0; }
-	 */
 }
