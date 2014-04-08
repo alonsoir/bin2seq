@@ -7,14 +7,6 @@
 
 	<repositories>
 		<repository>
-			<id>cloudera</id>
-			<url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
-		</repository>
-		<repository>
-			<id>Maven central</id>
-			<url>http://repo1.maven.org/maven2/</url>
-		</repository>
-		<repository>
 			<id>javacpp</id>
 			<name>JavaCPP</name>
 			<url>http://maven2.javacpp.googlecode.com/git/</url>
@@ -23,11 +15,6 @@
 			<id>javacv</id>
 			<name>JavaCV</name>
 			<url>http://maven2.javacv.googlecode.com/git/</url>
-		</repository>
-		<repository>
-			<id>netbeans</id>
-			<name>NetBeans</name>
-			<url>http://bits.netbeans.org/maven2/</url>
 		</repository>
 	</repositories>
 
@@ -53,22 +40,26 @@
 						<source>1.7</source>
 						<target>1.7</target>
 					</configuration>
-				</plugin>	
+				</plugin>
 			</plugins>
 		</pluginManagement>
 	</build>
+
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<hadoop.version>2.2.0</hadoop.version> <!-- obtain by running $hadoop version -->
-		<junit.version>LATEST</junit.version>
-		<log4j.version>LATEST</log4j.version>
+		<hadoop.version>2.2.0</hadoop.version> <!-- native apache $hadoop version or cloudera -->
 	</properties>
 
 	<dependencies>
 		<dependency>
+			<groupId>org.apache.spark</groupId>
+			<artifactId>spark-core_2.10</artifactId>
+			<version>0.9.0-incubating</version>
+		</dependency>
+		<dependency>
 			<groupId>org.apache.commons</groupId>
 			<artifactId>commons-compress</artifactId>
-			<version>1.0</version>
+			<version>LATEST</version>
 		</dependency>
 		<dependency>
 			<groupId>com.googlecode.javacv</groupId>
@@ -90,17 +81,13 @@
 			<artifactId>netcdf</artifactId>
 			<version>4.2.20</version>
 		</dependency>
+
 		<!-- Test -->
 		<dependency>
 			<groupId>junit</groupId>
 			<artifactId>junit</artifactId>
-			<version>${junit.version}</version>
+			<version>LATEST</version>
 			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.ant</groupId>
-			<artifactId>ant</artifactId>
-			<version>1.9.2</version>
 		</dependency>
 
 		<!-- Hadoop -->
@@ -108,13 +95,11 @@
 			<groupId>org.apache.hadoop</groupId>
 			<artifactId>hadoop-common</artifactId>
 			<version>${hadoop.version}</version>
-			<scope>provided</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.hadoop</groupId>
 			<artifactId>hadoop-client</artifactId>
 			<version>${hadoop.version}</version>
-			<scope>provided</scope>
 		</dependency>
 	</dependencies>
 </project>
