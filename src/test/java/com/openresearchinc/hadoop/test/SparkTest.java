@@ -2,19 +2,17 @@ package com.openresearchinc.hadoop.test;
 
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
-import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
 
 import javax.imageio.ImageIO;
+import javax.imageio.stream.ImageInputStream;
 import javax.xml.bind.DatatypeConverter;
 
 import org.apache.hadoop.io.BytesWritable;
-import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapred.SequenceFileOutputFormat;
 import org.apache.log4j.Logger;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
@@ -29,7 +27,8 @@ import org.junit.Test;
 import scala.Serializable;
 import scala.Tuple2;
 
-import com.google.common.io.Files;
+import com.openresearchinc.hadoop.sequencefile.OpenCV;
+import com.openresearchinc.hadoop.sequencefile.PPMImageReader;
 
 public class SparkTest implements Serializable {
 	private final static long serialVersionUID = -3319354077527132831L;
@@ -149,8 +148,9 @@ public class SparkTest implements Serializable {
 
 	@Test
 	/**
-	 * c.f. $SPARK_HOME/core/src/test/java/org/apache/spark/JavaAPISuite.java#sequenceFile
-	 * -Djava.library.path=$HADOOP_HOME/lib/native
+	 * Test read out text/image in sequenceformat from HDFS 
+	 * c.f. $SPARK_HOME/core/src/test/java/org/apache/spark/JavaAPISuite.java#sequenceFile	  
+	 * $mvn test -Dtest=SparkTest#testFileInSequence
 	 * @throws Exception
 	 */
 	public void testFileInSequence() throws Exception {
@@ -162,9 +162,6 @@ public class SparkTest implements Serializable {
 
 			@Override
 			public Tuple2<String, String> call(Tuple2<Text, BytesWritable> pair) {
-				// return new Tuple2<String,
-				// String>(pair._1().getBytes().toString(),
-				// pair._2().toString());
 				return new Tuple2<String, String>(pair._1().toString(), pair._2().toString());
 			}
 		});
@@ -175,21 +172,23 @@ public class SparkTest implements Serializable {
 					.contains("root"));
 		}
 
-		JavaPairRDD<String, String> imgrdd = ctx.sequenceFile("hdfs://" + namenode + "/tmp/lena.png.seq", Text.class,
-				BytesWritable.class).map(new PairFunction<Tuple2<Text, BytesWritable>, String, String>() {
+		JavaPairRDD<String, byte[]> imgrdd = ctx.sequenceFile("hdfs://" + namenode + "/tmp/00001_930831_hl_a.ppm.seq",
+				Text.class, BytesWritable.class).map(new PairFunction<Tuple2<Text, BytesWritable>, String, byte[]>() {
 			private static final long serialVersionUID = 1L;
 
 			@Override
-			public Tuple2<String, String> call(Tuple2<Text, BytesWritable> pair) {
-				return new Tuple2<String, String>(pair._1().toString(), pair._2().toString());
+			public Tuple2<String, byte[]> call(Tuple2<Text, BytesWritable> pair) {
+				return new Tuple2<String, byte[]>(pair._1().toString(), pair._2().getBytes());
 			}
 		});
-		List<Tuple2<String, String>> imgoutput = imgrdd.collect();
+		List<Tuple2<String, byte[]>> imgoutput = imgrdd.collect();
 		for (Tuple2<?, ?> tuple : imgoutput) {
 			logger.info(tuple._1().toString());
-			byte[] png = toByteArray(tuple._2().toString().replaceAll("\\s+", ""));
-			BufferedImage rawimage = ImageIO.read(new ByteArrayInputStream(png));
-			Assert.assertEquals(rawimage.getHeight(), 512);
+			byte[] image = (byte[]) tuple._2();
+			ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(image));
+			BufferedImage rawimage = PPMImageReader.read(iis);
+			int faces = OpenCV.detectFace(rawimage);
+			Assert.assertTrue(faces >= 1);
 		}
 	}
 
