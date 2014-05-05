@@ -1,14 +1,20 @@
 package com.openresearchinc.hadoop.test;
 
-//Credit to blog:http://noushinb.blogspot.com/2013/04/reading-writing-hadoop-sequence-files.html
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.io.File;
+import java.io.FileFilter;
+import java.io.FileReader;
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathExpression;
+import javax.xml.xpath.XPathExpressionException;
+import javax.xml.xpath.XPathFactory;
 
 import ncsa.hdf.object.h5.H5File;
 
@@ -21,6 +27,7 @@ import org.apache.hadoop.io.compress.Lz4Codec;
 import org.apache.hadoop.io.compress.SnappyCodec;
 import org.apache.log4j.Logger;
 import org.junit.Test;
+import org.xml.sax.InputSource;
 
 import ucar.ma2.Array;
 import ucar.ma2.ArrayDouble;
@@ -32,9 +39,48 @@ import com.openresearchinc.hadoop.sequencefile.OpenCV;
 import com.openresearchinc.hadoop.sequencefile.Util;
 import com.openresearchinc.hadoop.sequencefile.hdf5_getters;
 
+/**
+ * mvn test -Dtest=SequenceFileTest#<method>
+ * 
+ * @author Qiming He
+ * 
+ */
 public class SequenceFileTest {
-	private final static Logger logger = Logger.getLogger(SequenceFileTest.class);
-	private final static String hadoopMaster = "master:8020"; //host or FQDN of Hadoop namenode
+	final static Logger logger = Logger.getLogger(SequenceFileTest.class);
+
+	final static String hadoopMaster = "master:8020"; // be reset below
+	static {// TOOO: a better way to query for namenode IP:Port as hadoopMaster
+		File hadoopHomeDir = new File(System.getenv("HADOOP_HOME") + "/etc/hadoop");
+		if (hadoopHomeDir.isDirectory()) {
+			File[] files = hadoopHomeDir.listFiles(new FileFilter() {
+				public boolean accept(File file) {
+					return file.getName().endsWith("core-site.xml");
+				}
+			});
+			if (files.length == 1) {
+				try {
+					XPathFactory xpf = XPathFactory.newInstance();
+					XPath xpath = xpf.newXPath();
+					XPathExpression xpe = xpath.compile("//property[name/text()='fs.default.name']/value");
+					InputSource coresitexml = new InputSource(new FileReader(files[0]));
+					String hadoopMaster = xpe.evaluate(coresitexml).replace("hdfs://", "");
+					logger.debug(hadoopMaster);
+				} catch (IOException ioe) {
+					logger.error("Cannot find core-site.xml under $HADOOP_HOME");
+					System.exit(1);
+				} catch (XPathExpressionException e) {
+					logger.error("Error when parsing core-site.xml under $HADOOP_HOME");
+					System.exit(1);
+				}
+			} else {
+				logger.error("Cannot find fs.default.name in core-site.xml");
+				System.exit(1);
+			}
+		} else {
+			logger.error("$HADOOP_HOME is NOT defeined");
+			System.exit(1);
+		}
+	}
 
 	@Test
 	/**
@@ -43,9 +89,9 @@ public class SequenceFileTest {
 	 * @throws Exception
 	 */
 	public void testFaceDetectionInPPMFromS3() throws Exception {
-		String file="00001_930831_hl_a.ppm";
-		String inputURI = "s3://ori-colorferetsubset/00001/"+file+".bz2";
-		String outputURI = "hdfs://" + hadoopMaster + "/tmp/"+file+".seq";
+		String file = "00001_930831_hl_a.ppm";
+		String inputURI = "s3://ori-colorferetsubset/00001/" + file + ".bz2";
+		String outputURI = "hdfs://" + hadoopMaster + "/tmp/" + file + ".seq";
 		Util.writeToSequenceFile(inputURI, outputURI, new SnappyCodec());
 		int faces = OpenCV.detectFaceInPPM(outputURI);
 		assertTrue(faces == 1);
@@ -55,18 +101,14 @@ public class SequenceFileTest {
 	/**
 	 * 1.	JaveCV Face Detect image in SequenceFile from S3://
 	 * 2.  	JaveCV Face Detect image in SequenceFile from hdfs://
-	 * 
+	 * Before hdfs over HDFS is implemented, do $hadoop fs -cp  hdfs://<path>/tmp/lena.png.seq s3://ori-tmp/lena.png.seq
 	 * Eclipse: -Djava.library.path=/home/heq/hadoop-2.2.0/lib/native 
 	 * @throws Exception
 	 */
 	public void testJavaCVFaceDetectionFromHdfsSequenceFile() throws Exception {
 		String inputURI = "file://" + new File(this.getClass().getResource("/lena.png").getFile()).getAbsolutePath();
-
-		// Before hdfs over HDFS is implemented, do $hadoop fs -cp
-		// hdfs://<path>/tmp/lena.png.seq s3://ori-tmp/lena.png.seq
 		String s3URI = "s3://ori-tmp/lena.png.seq";
-		// Util.writeToSequenceFile(inputURI, s3URI, new SnappyCodec()); //TODO:
-		int faces = OpenCV.detectFaceinPngJpgEtc(s3URI);
+		int faces = OpenCV.detectFaceinPngJpgEtc(s3URI); // test without HDFS
 		assertTrue(faces == 1);
 
 		String hdfsURI = "hdfs://" + hadoopMaster + "/tmp/lena.png.seq";
@@ -74,11 +116,10 @@ public class SequenceFileTest {
 		faces = OpenCV.detectFaceinPngJpgEtc(hdfsURI);
 		assertTrue(faces == 1);
 	}
-	
 
 	@Test
 	public void testBatchFaceDetectionFromHDFS() throws Exception {
-		OpenCV.detectFacesInDir("hdfs://master:8020/tmp/","ppm.seq");
+		OpenCV.detectFacesInDir("hdfs://" + hadoopMaster + "/tmp/", "ppm.seq");
 	}
 
 	@Test
@@ -90,7 +131,7 @@ public class SequenceFileTest {
 		List<String> ncfiles = Util.listFiles("s3://nasanex/NEX-DCP30/BCSD/rcp26/mon/atmos/pr/r1i1p1/v1.0/", "nc");
 		assertTrue(ncfiles.size() >= 100); // a lot
 
-		List<String> fileUrls = Util.listFiles("s3://ori-colorferetsubset/", "bz2");
+		List<String> fileUrls = Util.listFiles("s3://ori-colorferetsubset/00001", "bz2");
 		for (String url : fileUrls) {
 			logger.info(url);
 			String file = org.apache.commons.io.FilenameUtils.getBaseName(url);
@@ -156,12 +197,12 @@ public class SequenceFileTest {
 	}
 
 	@Test
-	/** Test support (indirect) open HDF5 file from memory using netcdf API
-	 * -Djava.library.path=/usr/lib/jni/libjhdf5.so
+	/**
 	 * TODO: python API: http://stackoverflow.com/questions/16654251/can-h5py-load-a-file-from-a-byte-array-in-memory
 	 * @throws Exception
-	 */	
+	 */
 	public void testNetCDFInterfaceToACcessH5() throws Exception {
+		logger.info("java.library.path=" + System.getProperty("java.library.path"));
 		H5File h5 = hdf5_getters.hdf5_open_readonly(this.getClass().getResource("/TRAXLZU12903D05F94.h5").getPath());
 		double h5_temp = hdf5_getters.get_tempo(h5);
 
@@ -197,13 +238,6 @@ public class SequenceFileTest {
 	}
 
 	@Test
-	//@formatter:off
-	// get Hadoop source from http://apache.mirrors.tds.net/hadoop/common/stable/hadoop-2.2.0-src.tar.gz
-	// cd hadoop-common-project/hadoop-common
-	// $mvn compile -Pnative
-	// cp hadoop-common/target/native/target/usr/local/lib/libhadoop.so ~/hadoop-2.2.0/lib/native/.
-	// library -Djava.library.path=/home/heq/hadoop-2.2.0/lib/native
-	//@formatter:on
 	public void testGzipBzip2Lz4SnappyCodecs() throws Exception {
 		String path = this.getClass().getResource("/ncar.nc").getPath();
 		Util.writeToSequenceFile("file://" + path, "hdfs://" + hadoopMaster + "/tmp/ncar.seq", new GzipCodec());

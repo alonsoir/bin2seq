@@ -47,7 +47,11 @@
 					<configuration>
 						<forkMode>once</forkMode>
 						<workingDirectory>target</workingDirectory>
-						<argLine>-Djava.library.path=${env.HADOOP_HOME}/lib/native</argLine>
+						<!-- add native library pathes to LD_LIBRARY_PATH, which may vary on 
+							different systems. -->
+						<!--e.g., libjhdf5.so is /usr/lib/jni (Ubuntu) or /usr/lib64/jhdf5 
+							(amzn Linux) -->
+						<argLine>-Djava.library.path=${env.HADOOP_HOME}/lib/native:${env.LD_LIBRARY_PATH}</argLine>
 						<additionalClasspathElements>
 							<additionalClasspathElement>${env.JAVACV_BIN_HOME}/javacv.jar</additionalClasspathElement>
 							<additionalClasspathElement>${env.JAVACV_BIN_HOME}/javacpp.jar</additionalClasspathElement>
@@ -63,7 +67,7 @@
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<hadoop.version>2.2.0</hadoop.version> <!-- native apache $hadoop version or cloudera -->
+		<hadoop.version>2.2.0</hadoop.version> <!-- Hadoop version obtained from $hadoop version -->
 	</properties>
 
 	<dependencies>
@@ -116,6 +120,11 @@
 			<groupId>org.apache.hadoop</groupId>
 			<artifactId>hadoop-client</artifactId>
 			<version>${hadoop.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.jcabi</groupId>
+			<artifactId>jcabi-xml</artifactId>
+			<version>LATEST</version>
 		</dependency>
 	</dependencies>
 </project>

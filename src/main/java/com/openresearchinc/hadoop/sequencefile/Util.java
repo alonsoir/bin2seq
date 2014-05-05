@@ -10,14 +10,12 @@ package com.openresearchinc.hadoop.sequencefile;
 //3. include more compression modules: bz2, snappy, ... 
 
 import java.io.BufferedInputStream;
-import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.math.BigInteger;
 import java.net.URI;
 import java.net.URL;
-import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -27,12 +25,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.zip.GZIPInputStream;
-import java.util.zip.ZipInputStream;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
-import org.apache.commons.io.output.ByteArrayOutputStream;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
@@ -50,7 +45,6 @@ import org.apache.hadoop.io.compress.DefaultCodec;
 import org.apache.hadoop.io.compress.GzipCodec;
 import org.apache.hadoop.io.compress.SnappyCodec;
 import org.apache.hadoop.io.compress.bzip2.CBZip2InputStream;
-import org.apache.hadoop.io.compress.bzip2.CBZip2OutputStream;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.slf4j.Logger;
@@ -78,12 +72,10 @@ import com.amazonaws.services.s3.model.S3ObjectSummary;
 
 public class Util {
 
-	private final static Configuration conf = new Configuration();
-	private static final Logger logger = org.slf4j.LoggerFactory.getLogger(Util.class);
-	// private final static Logger logger = Logger.getLogger(Util.class);
-	private final static ClientConfiguration config = new ClientConfiguration();// .withProxyHost("firewall").withProxyPort(80);
-	public final static AmazonS3 s3Client = new AmazonS3Client(new BasicAWSCredentials(System.getenv("AWS_ACCESS_KEY"),
-			System.getenv("AWS_SECRET_KEY")), config);
+	final static Configuration conf = new Configuration();
+	final static AmazonS3 s3Client = new AmazonS3Client(new BasicAWSCredentials(System.getenv("AWS_ACCESS_KEY"),
+			System.getenv("AWS_SECRET_KEY")), new ClientConfiguration());
+	final static Logger logger = org.slf4j.LoggerFactory.getLogger(Util.class);
 
 	public static void main(String[] args) throws Exception {
 		String usage = "Usage: hadoop jar ./target/bin2seq*.jar com.openresearchinc.hadoop.sequencefile.Util -in <input-uri> -out <output-uri> -codec <gzip|bz2|snappy>";
@@ -171,7 +163,8 @@ public class Util {
 					if (!objectSummary.getKey().endsWith(ext))
 						continue;
 					uri.add("s3://" + bucket + "/" + objectSummary.getKey());
-					logger.debug(" - " + objectSummary.getKey() + "  " + "(size = " + objectSummary.getSize() + ")");
+					if (logger.isDebugEnabled())
+						logger.debug(" - " + objectSummary.getKey() + "  " + "(size = " + objectSummary.getSize() + ")");
 				}
 				listObjectsRequest.setMarker(objectListing.getNextMarker());
 			} while (objectListing.isTruncated());
@@ -205,7 +198,7 @@ public class Util {
 
 			byte[] uncompressed = null;
 			if (inputURI.endsWith("bz2")) {
-				uncompressed = unBZip2(bytes);
+				uncompressed = CompressUtil.unBZip2(bytes);
 			} else {
 				uncompressed = bytes;
 			}
@@ -224,10 +217,10 @@ public class Util {
 			InputStream objectContent = s3object.getObjectContent();
 			bytes = org.apache.commons.io.IOUtils.toByteArray(objectContent);
 			objectContent.close();
-			
+
 			byte[] uncompressed = null;
 			if (inputURI.endsWith("bz2")) {
-				uncompressed = unBZip2(bytes);
+				uncompressed = CompressUtil.unBZip2(bytes);
 			} else {
 				uncompressed = bytes;
 			}
@@ -243,20 +236,23 @@ public class Util {
 			value = new BytesWritable(bytes);
 
 		} else {
+			logger.error("File system option have not been implemented yet");
 			System.exit(2); // TODO
 		}
 
 		if (outputURI.startsWith("hdfs://")) {
+			// assume default path is HDFS
 			if (!conf.get("fs.defaultFS").contains("hdfs://")) {
 				conf.set("fs.defaultFS", "hdfs://" + outputURI.split("/")[2]);
 			}// only useful in eclipse, no need if running hadoop jar
 			outpath = new Path(outputURI.replaceAll("hdfs://[a-z\\.\\:0-9]+", ""));
 		} else if (outputURI.startsWith("s3://")) {
-			//assume hdfs over hdfs
-			System.exit(2); // TODO			
+			logger.error("s3:// output option has not been implemented yet");
+			System.exit(2); // TODO
 		} else if (outputURI.startsWith("file://")) {
 			outpath = new Path(outputURI.replaceAll("file://", ""));
 		} else {
+			logger.error("File system option has not been implemented yet");
 			System.exit(2); // TODO
 		}
 
@@ -275,10 +271,12 @@ public class Util {
 			}// only useful in eclipse, no need if running hadoop jar
 			path = new Path(sequenceFileURI.replaceAll("hdfs://[a-z\\.\\:0-9]+", ""));
 		} else if (sequenceFileURI.startsWith("s3://")) {
+			logger.error("File system option have not been implemented yet");
 			System.exit(2); // TODO
 		} else if (sequenceFileURI.startsWith("file://")) {
 			path = new Path(sequenceFileURI.replaceAll("file://", ""));
 		} else {
+			logger.error("File system option have not been implemented yet");
 			System.exit(2); // TODO
 		}
 
@@ -305,6 +303,7 @@ public class Util {
 		} else if (sequenceFileURI.startsWith("file://")) {
 			path = new Path(sequenceFileURI.replaceAll("file://", ""));
 		} else {
+			logger.error("File system option have not been implemented yet");
 			System.exit(2); // TODO
 		}
 
@@ -312,7 +311,8 @@ public class Util {
 		Text key = (Text) ReflectionUtils.newInstance(reader.getKeyClass(), conf);
 		BytesWritable value = (BytesWritable) ReflectionUtils.newInstance(reader.getValueClass(), conf);
 		while (reader.next(key, value)) {
-			logger.debug("key : " + key.toString() + " - value size: " + value.getBytes().length);
+			if (logger.isDebugEnabled())
+				logger.debug("key : " + key.toString() + " - value size: " + value.getBytes().length);
 			map.put(key, value.getBytes());
 		}
 		IOUtils.closeStream(reader);
@@ -343,89 +343,4 @@ public class Util {
 		logger.info("Copied SequenceFile from: " + from + " to: " + to);
 	}
 
-	public static byte[] unBZip2(byte[] data) {
-		byte[] b = null;
-		try {
-			ByteArrayInputStream bis = new ByteArrayInputStream(data);
-			bis.read();
-			bis.read(); // hack to strip two bytes 'BZ' from file header
-			CBZip2InputStream bzip2 = new CBZip2InputStream(bis);
-			byte[] buf = new byte[1024];
-			int num = -1;
-			ByteArrayOutputStream baos = new ByteArrayOutputStream();
-			while ((num = bzip2.read(buf, 0, buf.length)) != -1) {
-				baos.write(buf, 0, num);
-			}
-			b = baos.toByteArray();
-			baos.flush();
-			baos.close();
-			bzip2.close();
-			bis.close();
-		} catch (Exception ex) {
-			ex.printStackTrace();
-		}
-		return b;
-	}
-
-	public static byte[] bZip2(byte[] data) {
-		byte[] b = null;
-		try {
-			ByteArrayOutputStream bos = new ByteArrayOutputStream();
-			CBZip2OutputStream bzip2 = new CBZip2OutputStream(bos);
-			bzip2.write(data);
-			bzip2.flush();
-			bzip2.close();
-			b = bos.toByteArray();
-			bos.close();
-		} catch (Exception ex) {
-			ex.printStackTrace();
-		}
-		return b;
-	}
-
-	public static byte[] unGZip(byte[] data) {
-		byte[] b = null;
-		try {
-			ByteArrayInputStream bis = new ByteArrayInputStream(data);
-			GZIPInputStream gzip = new GZIPInputStream(bis);
-			byte[] buf = new byte[1024];
-			int num = -1;
-			ByteArrayOutputStream baos = new ByteArrayOutputStream();
-			while ((num = gzip.read(buf, 0, buf.length)) != -1) {
-				baos.write(buf, 0, num);
-			}
-			b = baos.toByteArray();
-			baos.flush();
-			baos.close();
-			gzip.close();
-			bis.close();
-		} catch (Exception ex) {
-			ex.printStackTrace();
-		}
-		return b;
-	}
-
-	public static byte[] unZip(byte[] data) {
-		byte[] b = null;
-		try {
-			ByteArrayInputStream bis = new ByteArrayInputStream(data);
-			ZipInputStream zip = new ZipInputStream(bis);
-			while (zip.getNextEntry() != null) {
-				byte[] buf = new byte[1024];
-				int num = -1;
-				ByteArrayOutputStream baos = new ByteArrayOutputStream();
-				while ((num = zip.read(buf, 0, buf.length)) != -1) {
-					baos.write(buf, 0, num);
-				}
-				b = baos.toByteArray();
-				baos.flush();
-				baos.close();
-			}
-			zip.close();
-			bis.close();
-		} catch (Exception ex) {
-			ex.printStackTrace();
-		}
-		return b;
-	}
 }
