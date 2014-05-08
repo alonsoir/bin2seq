@@ -246,9 +246,10 @@ public class Util {
 				conf.set("fs.defaultFS", "hdfs://" + outputURI.split("/")[2]);
 			}// only useful in eclipse, no need if running hadoop jar
 			outpath = new Path(outputURI.replaceAll("hdfs://[a-z\\.\\:0-9]+", ""));
-		} else if (outputURI.startsWith("s3://")) {
-			logger.error("s3:// output option has not been implemented yet");
-			System.exit(2); // TODO
+		} else if (outputURI.startsWith("s3n://")) {
+			conf.set("fs.s3n.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY"));
+			conf.set("fs.s3n.awsSecretAccessKey", System.getenv("AWS_SECRET_KEY"));
+			outpath = new Path(outputURI);
 		} else if (outputURI.startsWith("file://")) {
 			outpath = new Path(outputURI.replaceAll("file://", ""));
 		} else {
@@ -260,7 +261,7 @@ public class Util {
 				SequenceFile.Writer.compression(CompressionType.RECORD, codec),
 				SequenceFile.Writer.keyClass(Text.class), SequenceFile.Writer.valueClass(BytesWritable.class));
 		writer.append(key, value);
-		org.apache.hadoop.io.IOUtils.closeStream(writer);
+		IOUtils.closeStream(writer);
 	}
 
 	public static void listSequenceFileKeys(String sequenceFileURI) throws Exception {
@@ -270,9 +271,10 @@ public class Util {
 				conf.set("fs.defaultFS", "hdfs://" + sequenceFileURI.split("/")[2]);
 			}// only useful in eclipse, no need if running hadoop jar
 			path = new Path(sequenceFileURI.replaceAll("hdfs://[a-z\\.\\:0-9]+", ""));
-		} else if (sequenceFileURI.startsWith("s3://")) {
-			logger.error("File system option have not been implemented yet");
-			System.exit(2); // TODO
+		} else if (sequenceFileURI.startsWith("s3n://")) {			
+			conf.set("fs.s3n.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY"));
+			conf.set("fs.s3n.awsSecretAccessKey", System.getenv("AWS_SECRET_KEY"));
+			path = new Path(sequenceFileURI);
 		} else if (sequenceFileURI.startsWith("file://")) {
 			path = new Path(sequenceFileURI.replaceAll("file://", ""));
 		} else {
@@ -296,7 +298,7 @@ public class Util {
 				conf.set("fs.defaultFS", "hdfs://" + sequenceFileURI.split("/")[2]);
 			}// only useful in eclipse, no need if running hadoop jar
 			path = new Path(sequenceFileURI.replaceAll("hdfs://[a-z\\.\\:0-9]+", ""));
-		} else if (sequenceFileURI.startsWith("s3://")) {
+		} else if (sequenceFileURI.startsWith("s3n://")) {
 			conf.set("fs.s3.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY"));
 			conf.set("fs.s3.awsSecretAccessKey", System.getenv("AWS_SECRET_KEY"));
 			path = new Path(sequenceFileURI);

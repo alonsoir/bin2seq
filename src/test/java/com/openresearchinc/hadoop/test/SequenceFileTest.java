@@ -48,7 +48,7 @@ import com.openresearchinc.hadoop.sequencefile.hdf5_getters;
 public class SequenceFileTest {
 	final static Logger logger = Logger.getLogger(SequenceFileTest.class);
 
-	final static String hadoopMaster = "master:8020"; // be reset below
+	static String hadoopMaster = "master:8020"; // be reset below
 	static {// TOOO: a better way to query for namenode IP:Port as hadoopMaster
 		File hadoopHomeDir = new File(System.getenv("HADOOP_HOME") + "/etc/hadoop");
 		if (hadoopHomeDir.isDirectory()) {
@@ -63,7 +63,8 @@ public class SequenceFileTest {
 					XPath xpath = xpf.newXPath();
 					XPathExpression xpe = xpath.compile("//property[name/text()='fs.default.name']/value");
 					InputSource coresitexml = new InputSource(new FileReader(files[0]));
-					String hadoopMaster = xpe.evaluate(coresitexml).replace("hdfs://", "");
+					hadoopMaster = xpe.evaluate(coresitexml); // .replace("hdfs://",
+																// "");
 					logger.debug(hadoopMaster);
 				} catch (IOException ioe) {
 					logger.error("Cannot find core-site.xml under $HADOOP_HOME");
@@ -83,6 +84,11 @@ public class SequenceFileTest {
 	}
 
 	@Test
+	public void testTMP() throws Exception {
+		Util.writeToSequenceFile("file:///etc/passwd", "s3n:///tmp/passwd.seq", new DefaultCodec());
+	}
+
+	@Test
 	/**
 	 *  Test image in compressed PPM format as used in NIST Colorferet database 
 	 *  Eclipse: -Djava.library.path=/home/heq/hadoop-2.2.0/lib/native
@@ -91,7 +97,7 @@ public class SequenceFileTest {
 	public void testFaceDetectionInPPMFromS3() throws Exception {
 		String file = "00001_930831_hl_a.ppm";
 		String inputURI = "s3://ori-colorferetsubset/00001/" + file + ".bz2";
-		String outputURI = "hdfs://" + hadoopMaster + "/tmp/" + file + ".seq";
+		String outputURI = hadoopMaster + "/tmp/" + file + ".seq";
 		Util.writeToSequenceFile(inputURI, outputURI, new SnappyCodec());
 		int faces = OpenCV.detectFaceInPPM(outputURI);
 		assertTrue(faces == 1);
@@ -111,7 +117,7 @@ public class SequenceFileTest {
 		int faces = OpenCV.detectFaceinPngJpgEtc(s3URI); // test without HDFS
 		assertTrue(faces == 1);
 
-		String hdfsURI = "hdfs://" + hadoopMaster + "/tmp/lena.png.seq";
+		String hdfsURI = "s3n://ori-hadoop/tmp/lena.png.seq";
 		Util.writeToSequenceFile(inputURI, hdfsURI, new SnappyCodec());
 		faces = OpenCV.detectFaceinPngJpgEtc(hdfsURI);
 		assertTrue(faces == 1);
@@ -135,7 +141,7 @@ public class SequenceFileTest {
 		for (String url : fileUrls) {
 			logger.info(url);
 			String file = org.apache.commons.io.FilenameUtils.getBaseName(url);
-			Util.writeToSequenceFile(url, "hdfs://" + hadoopMaster + "/tmp/" + file + ".seq", new SnappyCodec());
+			Util.writeToSequenceFile(url, hadoopMaster + "/tmp/" + file + ".seq", new SnappyCodec());
 		}
 	}
 
@@ -220,8 +226,8 @@ public class SequenceFileTest {
 	public void testReadnetCDFinSequnceFileFormat() throws Exception {
 
 		String path = this.getClass().getResource("/ncar.nc").getPath();
-		Util.writeToSequenceFile("file://" + path, "hdfs://" + hadoopMaster + "/tmp/ncar.seq", new DefaultCodec());
-		Map<Text, byte[]> netcdfsequnce = Util.readSequenceFile("hdfs://" + hadoopMaster + "/tmp/ncar.seq");
+		Util.writeToSequenceFile("file://" + path, hadoopMaster + "/tmp/ncar.seq", new DefaultCodec());
+		Map<Text, byte[]> netcdfsequnce = Util.readSequenceFile(hadoopMaster+"/tmp/ncar.seq");
 		for (Map.Entry<Text, byte[]> entry : netcdfsequnce.entrySet()) {
 			NetcdfFile ncFile = NetcdfFile.openInMemory(entry.getKey().toString(), entry.getValue());
 			assertEquals(ncFile.getDimensions().size(), 5);
@@ -240,28 +246,28 @@ public class SequenceFileTest {
 	@Test
 	public void testGzipBzip2Lz4SnappyCodecs() throws Exception {
 		String path = this.getClass().getResource("/ncar.nc").getPath();
-		Util.writeToSequenceFile("file://" + path, "hdfs://" + hadoopMaster + "/tmp/ncar.seq", new GzipCodec());
-		Util.writeToSequenceFile("file://" + path, "hdfs://" + hadoopMaster + "/tmp/ncar.seq", new BZip2Codec());
-		Util.writeToSequenceFile("file://" + path, "hdfs://" + hadoopMaster + "/tmp/ncar.seq", new Lz4Codec());
-		Util.writeToSequenceFile("file://" + path, "hdfs://" + hadoopMaster + "/tmp/ncar.seq", new SnappyCodec());
+		Util.writeToSequenceFile("file://" + path, hadoopMaster + "/tmp/ncar.seq", new GzipCodec());
+		Util.writeToSequenceFile("file://" + path, hadoopMaster + "/tmp/ncar.seq", new BZip2Codec());
+		Util.writeToSequenceFile("file://" + path, hadoopMaster + "/tmp/ncar.seq", new Lz4Codec());
+		Util.writeToSequenceFile("file://" + path, hadoopMaster + "/tmp/ncar.seq", new SnappyCodec());
 	}
 
 	@Test
 	public void testListSequenceFileKey() throws Exception {
 		Util.writeToSequenceFile("file:///etc/passwd", "file:///tmp/passwd.seq", new DefaultCodec());
-		Util.listSequenceFileKeys("hdfs://" + hadoopMaster + "/tmp/passwd.seq");
+		Util.listSequenceFileKeys( hadoopMaster + "/tmp/passwd.seq");
 	}
 
 	@Test
 	public void testCopyfromS3ViaHttpToHdfs() throws Exception {
 		String inputURI = "http://nasanex.s3.amazonaws.com/NEX-DCP30/BCSD/rcp26/mon/atmos/pr/r1i1p1/v1.0/CONUS/pr_amon_BCSD_rcp26_r1i1p1_CONUS_HadGEM2-ES_200512-200512.nc";
-		Util.writeToSequenceFile(inputURI, "hdfs://" + hadoopMaster + "/tmp/nasa-nc.seq", new GzipCodec());
+		Util.writeToSequenceFile(inputURI, hadoopMaster + "/tmp/nasa-nc.seq", new SnappyCodec());
 
 		String existingBucketName = "ori-tmp"; // dir
 		String keyName = "passwd"; // file
 		inputURI = "s3://" + existingBucketName + ".s3.amazonaws.com/" + keyName;
-		Util.writeToSequenceFile(inputURI, "file:///tmp/passwd.seq", new GzipCodec());
-		Util.writeToSequenceFile(inputURI, "hdfs://" + hadoopMaster + "/tmp/passwd.seq", new SnappyCodec());
+		Util.writeToSequenceFile(inputURI, "file:///tmp/passwd.seq", new SnappyCodec());
+		Util.writeToSequenceFile(inputURI, hadoopMaster + "/tmp/passwd.seq", new SnappyCodec());
 	}
 
 	@Test
@@ -270,7 +276,7 @@ public class SequenceFileTest {
 				"s3://nasanex/MODIS/MOLT/MOD13Q1.005/2013.09.30/MOD13Q1.A2013273.h21v00.005.2013303115726.hdf", "hdf");
 		for (String uri : ncfiles) {
 			String output = new File(uri).getName();
-			Util.writeToSequenceFile(uri, "hdfs://" + hadoopMaster + "/tmp/" + output + ".seq", new DefaultCodec());
+			Util.writeToSequenceFile(uri, hadoopMaster + "/tmp/" + output + ".seq", new DefaultCodec());
 		}
 	}
 }
