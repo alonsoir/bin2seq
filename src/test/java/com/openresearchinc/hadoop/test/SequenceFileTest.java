@@ -4,17 +4,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.io.File;
-import java.io.FileFilter;
-import java.io.FileReader;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-
-import javax.xml.xpath.XPath;
-import javax.xml.xpath.XPathExpression;
-import javax.xml.xpath.XPathExpressionException;
-import javax.xml.xpath.XPathFactory;
 
 import ncsa.hdf.object.h5.H5File;
 
@@ -27,7 +19,6 @@ import org.apache.hadoop.io.compress.Lz4Codec;
 import org.apache.hadoop.io.compress.SnappyCodec;
 import org.apache.log4j.Logger;
 import org.junit.Test;
-import org.xml.sax.InputSource;
 
 import ucar.ma2.Array;
 import ucar.ma2.ArrayDouble;
@@ -45,47 +36,15 @@ import com.openresearchinc.hadoop.sequencefile.hdf5_getters;
  * @author Qiming He
  * 
  */
-public class SequenceFileTest {
+public class SequenceFileTest extends BaseTest {
 	final static Logger logger = Logger.getLogger(SequenceFileTest.class);
 
-	static String hadoopMaster = "master:8020"; // be reset below
-	static {// TOOO: a better way to query for namenode IP:Port as hadoopMaster
-		File hadoopHomeDir = new File(System.getenv("HADOOP_HOME") + "/etc/hadoop");
-		if (hadoopHomeDir.isDirectory()) {
-			File[] files = hadoopHomeDir.listFiles(new FileFilter() {
-				public boolean accept(File file) {
-					return file.getName().endsWith("core-site.xml");
-				}
-			});
-			if (files.length == 1) {
-				try {
-					XPathFactory xpf = XPathFactory.newInstance();
-					XPath xpath = xpf.newXPath();
-					XPathExpression xpe = xpath.compile("//property[name/text()='fs.default.name']/value");
-					InputSource coresitexml = new InputSource(new FileReader(files[0]));
-					hadoopMaster = xpe.evaluate(coresitexml); // .replace("hdfs://",
-																// "");
-					logger.debug(hadoopMaster);
-				} catch (IOException ioe) {
-					logger.error("Cannot find core-site.xml under $HADOOP_HOME");
-					System.exit(1);
-				} catch (XPathExpressionException e) {
-					logger.error("Error when parsing core-site.xml under $HADOOP_HOME");
-					System.exit(1);
-				}
-			} else {
-				logger.error("Cannot find fs.default.name in core-site.xml");
-				System.exit(1);
-			}
-		} else {
-			logger.error("$HADOOP_HOME is NOT defeined");
-			System.exit(1);
-		}
-	}
-
 	@Test
-	public void testTMP() throws Exception {
-		Util.writeToSequenceFile("file:///etc/passwd", "s3n:///tmp/passwd.seq", new DefaultCodec());
+	public void testTmp() throws Exception {
+
+		Map<Text, byte[]> ppm = Util.readSequenceFileFromS3("s3n://ori-hadoop/tmp/00001_930831_fa_a.ppm.seq");
+		Map<Text, byte[]> ncar = Util.readSequenceFileFromHDFS(hadoopMaster + "/tmp/ncar.seq");
+
 	}
 
 	@Test
@@ -111,13 +70,14 @@ public class SequenceFileTest {
 	 * Eclipse: -Djava.library.path=/home/heq/hadoop-2.2.0/lib/native 
 	 * @throws Exception
 	 */
-	public void testJavaCVFaceDetectionFromHdfsSequenceFile() throws Exception {
+	public void testJavaCVFaceDetectionFromS3HDFS() throws Exception {
 		String inputURI = "file://" + new File(this.getClass().getResource("/lena.png").getFile()).getAbsolutePath();
-		String s3URI = "s3://ori-tmp/lena.png.seq";
-		int faces = OpenCV.detectFaceinPngJpgEtc(s3URI); // test without HDFS
+		String s3URI = "s3n://ori-tmp/lena.png.seq";
+		Util.writeToSequenceFile(inputURI, s3URI, new SnappyCodec());
+		int faces = OpenCV.detectFaceinPngJpgEtc(s3URI);
 		assertTrue(faces == 1);
 
-		String hdfsURI = "s3n://ori-hadoop/tmp/lena.png.seq";
+		String hdfsURI = "s3n://ori-tmp/tmp/lena.png.seq";
 		Util.writeToSequenceFile(inputURI, hdfsURI, new SnappyCodec());
 		faces = OpenCV.detectFaceinPngJpgEtc(hdfsURI);
 		assertTrue(faces == 1);
@@ -125,7 +85,7 @@ public class SequenceFileTest {
 
 	@Test
 	public void testBatchFaceDetectionFromHDFS() throws Exception {
-		OpenCV.detectFacesInDir("hdfs://" + hadoopMaster + "/tmp/", "ppm.seq");
+		OpenCV.detectFacesInDir(hadoopMaster + "/tmp/", "ppm.seq");
 	}
 
 	@Test
@@ -227,7 +187,7 @@ public class SequenceFileTest {
 
 		String path = this.getClass().getResource("/ncar.nc").getPath();
 		Util.writeToSequenceFile("file://" + path, hadoopMaster + "/tmp/ncar.seq", new DefaultCodec());
-		Map<Text, byte[]> netcdfsequnce = Util.readSequenceFile(hadoopMaster+"/tmp/ncar.seq");
+		Map<Text, byte[]> netcdfsequnce = Util.readSequenceFile(hadoopMaster + "/tmp/ncar.seq");
 		for (Map.Entry<Text, byte[]> entry : netcdfsequnce.entrySet()) {
 			NetcdfFile ncFile = NetcdfFile.openInMemory(entry.getKey().toString(), entry.getValue());
 			assertEquals(ncFile.getDimensions().size(), 5);
@@ -255,7 +215,7 @@ public class SequenceFileTest {
 	@Test
 	public void testListSequenceFileKey() throws Exception {
 		Util.writeToSequenceFile("file:///etc/passwd", "file:///tmp/passwd.seq", new DefaultCodec());
-		Util.listSequenceFileKeys( hadoopMaster + "/tmp/passwd.seq");
+		Util.listSequenceFileKeys(hadoopMaster + "/tmp/passwd.seq");
 	}
 
 	@Test
