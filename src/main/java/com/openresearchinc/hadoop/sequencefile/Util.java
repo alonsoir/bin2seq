@@ -11,7 +11,6 @@ package com.openresearchinc.hadoop.sequencefile;
 
 import java.io.BufferedInputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -44,7 +43,6 @@ import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.DefaultCodec;
 import org.apache.hadoop.io.compress.GzipCodec;
 import org.apache.hadoop.io.compress.SnappyCodec;
-import org.apache.hadoop.io.compress.bzip2.CBZip2InputStream;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.slf4j.Logger;
@@ -145,7 +143,7 @@ public class Util {
 	public static List<String> listFiles(String dir, String ext) throws Exception {
 		List<String> uri = new ArrayList<String>();
 
-		if (dir.startsWith("s3://")) {
+		if (dir.startsWith("s3://") || dir.startsWith("s3n://")) {
 			String[] args = dir.split("/");
 			String bucket = args[2].split("\\.")[0];
 			List<String> argsList = new LinkedList<String>(Arrays.asList(args));
@@ -162,7 +160,7 @@ public class Util {
 				for (S3ObjectSummary objectSummary : objectListing.getObjectSummaries()) {
 					if (!objectSummary.getKey().endsWith(ext))
 						continue;
-					uri.add("s3://" + bucket + "/" + objectSummary.getKey());
+					uri.add("s3n://" + bucket + "/" + objectSummary.getKey());
 					if (logger.isDebugEnabled())
 						logger.debug(" - " + objectSummary.getKey() + "  " + "(size = " + objectSummary.getSize() + ")");
 				}
@@ -181,6 +179,7 @@ public class Util {
 		return uri;
 	}
 
+	
 	public static void writeToSequenceFile(String inputURI, String outputURI, CompressionCodec codec)
 			throws IOException, NoSuchAlgorithmException {
 		Path outpath = null;
@@ -271,10 +270,10 @@ public class Util {
 				conf.set("fs.defaultFS", "hdfs://" + sequenceFileURI.split("/")[2]);
 			}// only useful in eclipse, no need if running hadoop jar
 			path = new Path(sequenceFileURI.replaceAll("hdfs://[a-z\\.\\:0-9]+", ""));
-		} else if (sequenceFileURI.startsWith("s3n://")) {			
+		} else if (sequenceFileURI.startsWith("s3n://")) {
 			conf.set("fs.s3n.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY"));
 			conf.set("fs.s3n.awsSecretAccessKey", System.getenv("AWS_SECRET_KEY"));
-			path = new Path(sequenceFileURI);
+			path = new Path(sequenceFileURI); // NEXT SPIKE
 		} else if (sequenceFileURI.startsWith("file://")) {
 			path = new Path(sequenceFileURI.replaceAll("file://", ""));
 		} else {
@@ -290,6 +289,59 @@ public class Util {
 		IOUtils.closeStream(reader);
 	}
 
+	public static Map<Text, byte[]> readSequenceFileFromS3(String s3URI) throws IOException {
+		String accessKey = System.getenv("AWS_ACCESS_KEY");
+		String secretKey = System.getenv("AWS_SECRET_KEY");
+		if (accessKey == null || accessKey.isEmpty() || secretKey == null || secretKey.isEmpty()) {
+			logger.error("$AWS_ACCESS_KEY or $AWS_SECRET_KEY is not set");
+			System.exit(1);
+		}
+		Pattern pattern = Pattern.compile("^s3n://\\S+/\\S+");
+		Matcher m = pattern.matcher(s3URI);
+		if (!m.find()) {
+			logger.error("Wrong S3 URI format, should be something like s3n://bucket/object");
+			System.exit(1);
+		}
+		conf.set("fs.s3n.awsAccessKeyId", accessKey);
+		conf.set("fs.s3n.awsSecretAccessKey", secretKey);
+		return read(new Path(s3URI));
+	}
+
+	public static Map<Text, byte[]> readSequenceFileFromHDFS(String hdfsURI) throws IOException {
+		Pattern pattern = Pattern.compile("^hdfs://\\w+:\\d+/\\S+");
+		Matcher m = pattern.matcher(hdfsURI);
+		if (!m.find()) {
+			logger.error("Wrong HDFS URI format, should be something like hdfs://namenod-ip:port/object");
+			System.exit(1);
+		}
+		return read(new Path(hdfsURI));
+	}
+
+	public static Map<Text, byte[]> readSequenceFileFromFS(String fileURI) throws IOException {
+		Pattern pattern = Pattern.compile("^file://\\S+/\\S+");
+		Matcher m = pattern.matcher(fileURI);
+		if (!m.find()) {
+			logger.error("Wrong Native File System URI format, should be something like file:///path/.../file");
+		}
+		return read(new Path(fileURI.replaceAll("file://", "")));
+
+	}
+
+	private static Map<Text, byte[]> read(Path path) throws IOException {
+		Map<Text, byte[]> map = new HashMap<Text, byte[]>();
+		SequenceFile.Reader reader = new SequenceFile.Reader(conf, SequenceFile.Reader.file(path));
+		Text key = (Text) ReflectionUtils.newInstance(reader.getKeyClass(), conf);
+		BytesWritable value = (BytesWritable) ReflectionUtils.newInstance(reader.getValueClass(), conf);
+		while (reader.next(key, value)) {
+			if (logger.isDebugEnabled())
+				logger.debug("key : " + key.toString() + " - value size: " + value.getBytes().length);
+			map.put(key, value.getBytes());
+		}
+		IOUtils.closeStream(reader);
+		return map;
+	}
+
+	// @Deprecated
 	public static Map<Text, byte[]> readSequenceFile(String sequenceFileURI) throws IOException {
 		Map<Text, byte[]> map = new HashMap<Text, byte[]>();
 		Path path = null;
@@ -298,9 +350,9 @@ public class Util {
 				conf.set("fs.defaultFS", "hdfs://" + sequenceFileURI.split("/")[2]);
 			}// only useful in eclipse, no need if running hadoop jar
 			path = new Path(sequenceFileURI.replaceAll("hdfs://[a-z\\.\\:0-9]+", ""));
-		} else if (sequenceFileURI.startsWith("s3n://")) {
-			conf.set("fs.s3.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY"));
-			conf.set("fs.s3.awsSecretAccessKey", System.getenv("AWS_SECRET_KEY"));
+		} else if (sequenceFileURI.startsWith("s3n://") || sequenceFileURI.startsWith("s3://")) {
+			conf.set("fs.s3n.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY"));
+			conf.set("fs.s3n.awsSecretAccessKey", System.getenv("AWS_SECRET_KEY"));
 			path = new Path(sequenceFileURI);
 		} else if (sequenceFileURI.startsWith("file://")) {
 			path = new Path(sequenceFileURI.replaceAll("file://", ""));

@@ -56,8 +56,7 @@ public class OpenCV {
 
 	public static void main(String[] args) throws Exception {
 		String usage = "Usage: hadoop jar ./target/*.jar com.openresearchinc.hadoop.sequencefile.OpenCV [-file <input-uri-image>|-dir <input-uri-images>] -ext <ext> ";
-		String[] otherArgs = new GenericOptionsParser(conf, args)
-				.getRemainingArgs();
+		String[] otherArgs = new GenericOptionsParser(conf, args).getRemainingArgs();
 
 		List<String> argList = Arrays.asList(otherArgs);
 		String uri;
@@ -86,8 +85,7 @@ public class OpenCV {
 		}
 	}
 
-	public static void detectFacesInDir(String dir, String ext)
-			throws Exception {
+	public static void detectFacesInDir(String dir, String ext) throws Exception {
 		List<String> fileURIs = Util.listFiles(dir, ext);
 		for (String uri : fileURIs) {
 			logger.info(uri);
@@ -95,6 +93,9 @@ public class OpenCV {
 				detectFaceinPngJpgEtc(uri);
 			} else if (uri.toLowerCase().matches(".*ppm.*")) {
 				detectFaceInPPM(uri);
+			}else {
+				logger.error("unsupported image format:" + ext);
+				System.exit(1);
 			}
 		}
 	}
@@ -112,12 +113,10 @@ public class OpenCV {
 	public static void detectFace(String hdfsdir, String ext) throws Exception {
 		if (hdfsdir.contains("hdfs://")) {
 			conf.set("fs.defaultFS", hdfsdir);
-			FileStatus[] status = FileSystem.get(conf).listStatus(
-					new Path(hdfsdir));
+			FileStatus[] status = FileSystem.get(conf).listStatus(new Path(hdfsdir));
 			for (int i = 0; i < status.length; i++) {
 				Path path = status[i].getPath();
-				if (path.getName().endsWith(ext) && status[i].getLen() > 0
-						&& !status[i].isSymlink()) {
+				if (path.getName().endsWith(ext) && status[i].getLen() > 0 && !status[i].isSymlink()) {
 					logger.debug(status[i].getPath() + " " + status[i].getLen());
 					detectFaceinPngJpgEtc(path.toString());
 				}
@@ -139,16 +138,24 @@ public class OpenCV {
 	 * @throws Exception
 	 */
 	public static int detectFaceinPngJpgEtc(String uri) throws Exception {
-		Map<Text, byte[]> imagesequnce = Util.readSequenceFile(uri);
+		Map<Text, byte[]> imagesequnce = null;
+		if (uri.startsWith("s3n://"))
+			imagesequnce = Util.readSequenceFileFromS3(uri);
+		else if (uri.startsWith("hdfs://"))
+			imagesequnce = Util.readSequenceFileFromHDFS(uri);
+		else {
+			logger.error("only hdfs:// and s3n;// sequncefile accesses are implemented");
+			System.exit(1);
+		}
+
 		for (Map.Entry<Text, byte[]> entry : imagesequnce.entrySet()) {
 			String filename = entry.getKey().toString();
-			BufferedImage rawimage = ImageIO.read(new ByteArrayInputStream(
-					entry.getValue()));
+			BufferedImage rawimage = ImageIO.read(new ByteArrayInputStream(entry.getValue()));
 			int faces = detectFace(rawimage);
 			logger.info("filename=" + filename + " faces=" + faces);
-			return faces;
+			return faces; // 0: no face; 1: one face, ...
 		}
-		return 0;
+		return -1; // indicate error in image sequencefile
 	}
 
 	/**
@@ -159,23 +166,28 @@ public class OpenCV {
 	 * @throws Exception
 	 */
 	public static int detectFaceInPPM(String uri) throws Exception {
-		Map<Text, byte[]> imagesequnce = Util.readSequenceFile(uri);
+		Map<Text, byte[]> imagesequnce = null;
+		if (uri.startsWith("s3n://"))
+			imagesequnce = Util.readSequenceFileFromS3(uri);
+		else if (uri.startsWith("hdfs://"))
+			imagesequnce = Util.readSequenceFileFromHDFS(uri);
+		else {
+			logger.error("only hdfs:// and s3n;// sequncefile accesses are implemented");
+			System.exit(1);
+		}
 		for (Map.Entry<Text, byte[]> entry : imagesequnce.entrySet()) {
 			String filename = entry.getKey().toString();
-			ImageInputStream iis = ImageIO
-					.createImageInputStream(new ByteArrayInputStream(entry
-							.getValue()));
+			ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(entry.getValue()));
 			BufferedImage rawimage = PPMImageReader.read(iis);
 			int faces = detectFace(rawimage);
-			logger.debug("filename=" + filename + "faces=" + faces);
+			logger.info("filename=" + filename + "faces=" + faces);
 			return faces;
 		}
-		return 0;
+		return -1; // indicate error in image sequencefile
 	}
 
 	public static int detectFace(BufferedImage rawimage) throws Exception {
-		String faceClassifierPath = new File(OpenCV.class.getResource(
-				"/haarcascade_frontalface_alt.xml").getFile())
+		String faceClassifierPath = new File(OpenCV.class.getResource("/haarcascade_frontalface_alt.xml").getFile())
 				.getAbsolutePath();
 		int faces = detect(rawimage, faceClassifierPath);
 		logger.info("faces=" + faces);
@@ -183,30 +195,26 @@ public class OpenCV {
 	}
 
 	public static int detectEye(BufferedImage rawimage) throws Exception {
-		String eyeClassifierPath = new File(OpenCV.class.getResource(
-				"/haarcascade_eye.xml").getFile()).getAbsolutePath();
+		String eyeClassifierPath = new File(OpenCV.class.getResource("/haarcascade_eye.xml").getFile())
+				.getAbsolutePath();
 		int eyes = detect(rawimage, eyeClassifierPath);
 		logger.info("eyes=" + eyes);
 		return eyes;
 	}
 
 	private static int detect(BufferedImage rawimage, String classifierPath) {
-		CvHaarClassifierCascade classifier = new CvHaarClassifierCascade(
-				cvLoad(classifierPath));
+		CvHaarClassifierCascade classifier = new CvHaarClassifierCascade(cvLoad(classifierPath));
 		IplImage origImg = IplImage.createFrom(rawimage);
 		CvMemStorage storage = CvMemStorage.create();
-		CvSeq target = cvHaarDetectObjects(origImg, classifier, storage, 1.1,
-				3, CV_HAAR_DO_CANNY_PRUNING);
+		CvSeq target = cvHaarDetectObjects(origImg, classifier, storage, 1.1, 3, CV_HAAR_DO_CANNY_PRUNING);
 		cvClearMemStorage(storage);
 
 		for (int i = 0; i < target.total(); i++) {
 			CvRect r = new CvRect(cvGetSeqElem(target, i));
-			logger.debug("x=" + r.x() + " y=" + r.y() + " x+w=" + r.x()
-					+ r.width() + " y+h=" + r.y() + r.height());
+			logger.debug("x=" + r.x() + " y=" + r.y() + " x+w=" + r.x() + r.width() + " y+h=" + r.y() + r.height());
 		}
-		logger.debug("image width=" + rawimage.getWidth() + " height="
-				+ rawimage.getHeight() + " num of identified object="
-				+ target.total());
+		logger.debug("image width=" + rawimage.getWidth() + " height=" + rawimage.getHeight()
+				+ " num of identified object=" + target.total());
 
 		return target.total();
 	}
