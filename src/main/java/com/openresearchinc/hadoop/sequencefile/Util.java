@@ -308,7 +308,7 @@ public class Util {
 	}
 
 	public static Map<Text, byte[]> readSequenceFileFromHDFS(String hdfsURI) throws IOException {
-		Pattern pattern = Pattern.compile("^hdfs://\\w+:\\d+/\\S+");
+		Pattern pattern = Pattern.compile("^hdfs://\\S+:\\d+/\\S+");
 		Matcher m = pattern.matcher(hdfsURI);
 		if (!m.find()) {
 			logger.error("Wrong HDFS URI format, should be something like hdfs://namenod-ip:port/object");
