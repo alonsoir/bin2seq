@@ -203,7 +203,7 @@ public class Util {
 			}
 			key = new Text(dataFile.getAbsolutePath());
 			value = new BytesWritable(uncompressed);
-		} else if (inputURI.startsWith("s3://")) {
+		} else if (inputURI.startsWith("s3://") || inputURI.startsWith("s3n://")) {
 			String[] args = inputURI.split("/");
 			String bucket = args[2].split("\\.")[0];
 			List<String> argsList = new LinkedList<String>(Arrays.asList(args));
