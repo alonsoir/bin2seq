@@ -1,11 +1,8 @@
 package com.openresearchinc.hadoop.sequencefile;
 
-import static com.googlecode.javacv.cpp.opencv_core.CV_AA;
 import static com.googlecode.javacv.cpp.opencv_core.cvClearMemStorage;
 import static com.googlecode.javacv.cpp.opencv_core.cvGetSeqElem;
 import static com.googlecode.javacv.cpp.opencv_core.cvLoad;
-import static com.googlecode.javacv.cpp.opencv_core.cvPoint;
-import static com.googlecode.javacv.cpp.opencv_core.cvRectangle;
 import static com.googlecode.javacv.cpp.opencv_objdetect.CV_HAAR_DO_CANNY_PRUNING;
 import static com.googlecode.javacv.cpp.opencv_objdetect.cvHaarDetectObjects;
 
@@ -13,6 +10,8 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -31,7 +30,6 @@ import org.slf4j.LoggerFactory;
 
 import com.googlecode.javacv.cpp.opencv_core.CvMemStorage;
 import com.googlecode.javacv.cpp.opencv_core.CvRect;
-import com.googlecode.javacv.cpp.opencv_core.CvScalar;
 import com.googlecode.javacv.cpp.opencv_core.CvSeq;
 import com.googlecode.javacv.cpp.opencv_core.IplImage;
 import com.googlecode.javacv.cpp.opencv_objdetect.CvHaarClassifierCascade;
@@ -52,6 +50,14 @@ import com.googlecode.javacv.cpp.opencv_objdetect.CvHaarClassifierCascade;
 // @formatter:on
 public class OpenCV {
 	private static final Logger logger = LoggerFactory.getLogger(OpenCV.class);
+	static String hostname = "localhost";
+	static {
+		try {
+			hostname = InetAddress.getLocalHost().getHostName();
+		} catch (UnknownHostException e) {
+			logger.warn("hostname is NOT resolvable by DNS. localhost is used for logging");
+		}
+	}
 	private static final Configuration conf = new Configuration();
 
 	public static void main(String[] args) throws Exception {
@@ -88,12 +94,11 @@ public class OpenCV {
 	public static void detectFacesInDir(String dir, String ext) throws Exception {
 		List<String> fileURIs = Util.listFiles(dir, ext);
 		for (String uri : fileURIs) {
-			logger.info(uri);
 			if (uri.toLowerCase().matches(".*png.*|.*jpg.*|.*gif.*")) {
 				detectFaceinPngJpgEtc(uri);
 			} else if (uri.toLowerCase().matches(".*ppm.*")) {
 				detectFaceInPPM(uri);
-			}else {
+			} else {
 				logger.error("unsupported image format:" + ext);
 				System.exit(1);
 			}
@@ -135,14 +140,25 @@ public class OpenCV {
 	 * 
 	 * @param uri
 	 * @return
+	 * @throws IOException
 	 * @throws Exception
 	 */
-	public static int detectFaceinPngJpgEtc(String uri) throws Exception {
+	public static int detectFaceinPngJpgEtc(String uri) {
 		Map<Text, byte[]> imagesequnce = null;
 		if (uri.startsWith("s3n://"))
-			imagesequnce = Util.readSequenceFileFromS3(uri);
+			try {
+				imagesequnce = Util.readSequenceFileFromS3(uri);
+			} catch (IOException e) {
+				logger.warn("Cannot read SequnceFile from S3: " + uri);
+				return -1;
+			}
 		else if (uri.startsWith("hdfs://"))
-			imagesequnce = Util.readSequenceFileFromHDFS(uri);
+			try {
+				imagesequnce = Util.readSequenceFileFromHDFS(uri);
+			} catch (IOException e) {
+				logger.warn("Cannot read SequnceFile from HDFS:" + uri);
+				return -1;
+			}
 		else {
 			logger.error("only hdfs:// and s3n;// sequncefile accesses are implemented");
 			System.exit(1);
@@ -150,10 +166,16 @@ public class OpenCV {
 
 		for (Map.Entry<Text, byte[]> entry : imagesequnce.entrySet()) {
 			String filename = entry.getKey().toString();
-			BufferedImage rawimage = ImageIO.read(new ByteArrayInputStream(entry.getValue()));
-			int faces = detectFace(rawimage);
-			logger.info("filename=" + filename + " faces=" + faces);
-			return faces; // 0: no face; 1: one face, ...
+
+			try {
+				BufferedImage rawimage = ImageIO.read(new ByteArrayInputStream(entry.getValue()));
+				int faces = detectFace(rawimage);
+				logger.info("hostname=" + hostname + " filename=" + filename + " faces=" + faces);
+				return faces; // 0: no face; 1: one face, ...
+			} catch (IOException e) {
+				logger.warn("Cannot read bytes into image");
+				return -1;
+			}
 		}
 		return -1; // indicate error in image sequencefile
 	}
@@ -163,42 +185,57 @@ public class OpenCV {
 	 * 
 	 * @param uri
 	 * @return
-	 * @throws Exception
 	 */
-	public static int detectFaceInPPM(String uri) throws Exception {
+	public static int detectFaceInPPM(String uri) {
 		Map<Text, byte[]> imagesequnce = null;
 		if (uri.startsWith("s3n://"))
-			imagesequnce = Util.readSequenceFileFromS3(uri);
+			try {
+				imagesequnce = Util.readSequenceFileFromS3(uri);
+			} catch (IOException e) {
+				logger.warn("Cannot read SequnceFile from S3: " + uri);
+				return -1;
+			}
+
 		else if (uri.startsWith("hdfs://"))
-			imagesequnce = Util.readSequenceFileFromHDFS(uri);
+			try {
+				imagesequnce = Util.readSequenceFileFromHDFS(uri);
+			} catch (IOException e) {
+				logger.warn("Cannot read SequnceFile from HDFS:" + uri);
+				return -1;
+			}
 		else {
 			logger.error("only hdfs:// and s3n;// sequncefile accesses are implemented");
 			System.exit(1);
 		}
 		for (Map.Entry<Text, byte[]> entry : imagesequnce.entrySet()) {
 			String filename = entry.getKey().toString();
-			ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(entry.getValue()));
-			BufferedImage rawimage = PPMImageReader.read(iis);
-			int faces = detectFace(rawimage);
-			logger.info("filename=" + filename + "faces=" + faces);
-			return faces;
+			try {
+				ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(entry.getValue()));
+				BufferedImage rawimage = PPMImageReader.read(iis);
+				int faces = detectFace(rawimage);
+				logger.info("hostname= " + hostname + " filename= " + filename + " faces= " + faces);
+				return faces;
+			} catch (IOException e) {
+				logger.warn("Cannot read bytes into image");
+				return -1;
+			}
 		}
 		return -1; // indicate error in image sequencefile
 	}
 
-	public static int detectFace(BufferedImage rawimage) throws Exception {
+	public static int detectFace(BufferedImage rawimage) {
 		String faceClassifierPath = new File(OpenCV.class.getResource("/haarcascade_frontalface_alt.xml").getFile())
 				.getAbsolutePath();
 		int faces = detect(rawimage, faceClassifierPath);
-		logger.info("faces=" + faces);
+		logger.debug("faces=" + faces);
 		return faces;
 	}
 
-	public static int detectEye(BufferedImage rawimage) throws Exception {
+	public static int detectEye(BufferedImage rawimage) {
 		String eyeClassifierPath = new File(OpenCV.class.getResource("/haarcascade_eye.xml").getFile())
 				.getAbsolutePath();
 		int eyes = detect(rawimage, eyeClassifierPath);
-		logger.info("eyes=" + eyes);
+		logger.debug("eyes=" + eyes);
 		return eyes;
 	}
 
@@ -211,11 +248,12 @@ public class OpenCV {
 
 		for (int i = 0; i < target.total(); i++) {
 			CvRect r = new CvRect(cvGetSeqElem(target, i));
-			logger.debug("x=" + r.x() + " y=" + r.y() + " x+w=" + r.x() + r.width() + " y+h=" + r.y() + r.height());
+			if (logger.isDebugEnabled())
+				logger.debug("x=" + r.x() + " y=" + r.y() + " x+w=" + r.x() + r.width() + " y+h=" + r.y() + r.height());
 		}
-		logger.debug("image width=" + rawimage.getWidth() + " height=" + rawimage.getHeight()
-				+ " num of identified object=" + target.total());
-
+		if (logger.isDebugEnabled())
+			logger.debug("image width=" + rawimage.getWidth() + " height=" + rawimage.getHeight()
+					+ " num of identified object=" + target.total());
 		return target.total();
 	}
 

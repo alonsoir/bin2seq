@@ -13,8 +13,10 @@ import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetAddress;
 import java.net.URI;
 import java.net.URL;
+import java.net.UnknownHostException;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -69,11 +71,19 @@ import com.amazonaws.services.s3.model.S3ObjectSummary;
 // @formatter:on
 
 public class Util {
+	final static Logger logger = org.slf4j.LoggerFactory.getLogger(Util.class);
+	static String hostname = "localhost";
+	static {
+		try {
+			hostname = InetAddress.getLocalHost().getHostName();
+		} catch (UnknownHostException e) {
+			logger.warn("hostname is NOT resolvable by DNS. localhost is used for logging");
+		}
+	}
 
 	final static Configuration conf = new Configuration();
 	final static AmazonS3 s3Client = new AmazonS3Client(new BasicAWSCredentials(System.getenv("AWS_ACCESS_KEY"),
 			System.getenv("AWS_SECRET_KEY")), new ClientConfiguration());
-	final static Logger logger = org.slf4j.LoggerFactory.getLogger(Util.class);
 
 	public static void main(String[] args) throws Exception {
 		String usage = "Usage: hadoop jar ./target/bin2seq*.jar com.openresearchinc.hadoop.sequencefile.Util -in <input-uri> -out <output-uri> -codec <gzip|bz2|snappy>";
@@ -179,7 +189,6 @@ public class Util {
 		return uri;
 	}
 
-	
 	public static void writeToSequenceFile(String inputURI, String outputURI, CompressionCodec codec)
 			throws IOException, NoSuchAlgorithmException {
 		Path outpath = null;

@@ -31,5 +31,6 @@ echo "export AWS_SECRET_KEY=" >>~/.bashrc
 #sudo yum -y install apache-maven git
 
 #To compare with serial 
-#sudo yum -y install numpy opencv* python-imaging 
-
+#sudo yum -y install numpy opencv* python-imaging libdc1394-devel ?
+#sudo wget http://download.opensuse.org/repositories/home:tange/CentOS_CentOS-5/home:tange.repo -O /etc/yum.repos.d/tange.repo
+#sudo yum -y install parallel
