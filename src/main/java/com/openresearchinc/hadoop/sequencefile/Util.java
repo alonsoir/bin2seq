@@ -13,10 +13,8 @@ import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.InetAddress;
 import java.net.URI;
 import java.net.URL;
-import java.net.UnknownHostException;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -72,14 +70,6 @@ import com.amazonaws.services.s3.model.S3ObjectSummary;
 
 public class Util {
 	final static Logger logger = org.slf4j.LoggerFactory.getLogger(Util.class);
-	static String hostname = "localhost";
-	static {
-		try {
-			hostname = InetAddress.getLocalHost().getHostName();
-		} catch (UnknownHostException e) {
-			logger.warn("hostname is NOT resolvable by DNS. localhost is used for logging");
-		}
-	}
 
 	final static Configuration conf = new Configuration();
 	final static AmazonS3 s3Client = new AmazonS3Client(new BasicAWSCredentials(System.getenv("AWS_ACCESS_KEY"),
@@ -298,7 +288,7 @@ public class Util {
 		IOUtils.closeStream(reader);
 	}
 
-	public static Map<Text, byte[]> readSequenceFileFromS3(String s3URI) throws IOException {
+	public static byte[] readSequenceFileFromS3(String s3URI) throws IOException {
 		String accessKey = System.getenv("AWS_ACCESS_KEY");
 		String secretKey = System.getenv("AWS_SECRET_KEY");
 		if (accessKey == null || accessKey.isEmpty() || secretKey == null || secretKey.isEmpty()) {
@@ -316,7 +306,7 @@ public class Util {
 		return read(new Path(s3URI));
 	}
 
-	public static Map<Text, byte[]> readSequenceFileFromHDFS(String hdfsURI) throws IOException {
+	public static byte[] readSequenceFileFromHDFS(String hdfsURI) throws IOException {
 		Pattern pattern = Pattern.compile("^hdfs://\\S+:\\d+/\\S+");
 		Matcher m = pattern.matcher(hdfsURI);
 		if (!m.find()) {
@@ -326,28 +316,27 @@ public class Util {
 		return read(new Path(hdfsURI));
 	}
 
-	public static Map<Text, byte[]> readSequenceFileFromFS(String fileURI) throws IOException {
+	public static byte[] readSequenceFileFromFS(String fileURI) throws IOException {
 		Pattern pattern = Pattern.compile("^file://\\S+/\\S+");
 		Matcher m = pattern.matcher(fileURI);
 		if (!m.find()) {
 			logger.error("Wrong Native File System URI format, should be something like file:///path/.../file");
 		}
 		return read(new Path(fileURI.replaceAll("file://", "")));
-
 	}
 
-	private static Map<Text, byte[]> read(Path path) throws IOException {
-		Map<Text, byte[]> map = new HashMap<Text, byte[]>();
+	private static byte[] read(Path path) throws IOException {
+		// Map<Text, byte[]> map = new HashMap<Text, byte[]>();
 		SequenceFile.Reader reader = new SequenceFile.Reader(conf, SequenceFile.Reader.file(path));
 		Text key = (Text) ReflectionUtils.newInstance(reader.getKeyClass(), conf);
 		BytesWritable value = (BytesWritable) ReflectionUtils.newInstance(reader.getValueClass(), conf);
 		while (reader.next(key, value)) {
 			if (logger.isDebugEnabled())
 				logger.debug("key : " + key.toString() + " - value size: " + value.getBytes().length);
-			map.put(key, value.getBytes());
+			return value.getBytes();
 		}
 		IOUtils.closeStream(reader);
-		return map;
+		return null;
 	}
 
 	// @Deprecated
@@ -405,5 +394,4 @@ public class Util {
 		fs.copyFromLocalFile(deleteSource, localPath, hdfsPath);
 		logger.info("Copied SequenceFile from: " + from + " to: " + to);
 	}
-
 }
