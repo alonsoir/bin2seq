@@ -26,6 +26,7 @@ echo "export AWS_ACCESS_KEY=" >>~/.bashrc
 echo "export AWS_SECRET_KEY=" >>~/.bashrc
 
 #only on NN, no need to bootstrap to all nodes
+#sudo yum -y --enablerepo epel install s3cmd
 #sudo wget http://repos.fedorapeople.org/repos/dchen/apache-maven/epel-apache-maven.repo -O /etc/yum.repos.d/epel-apache-maven.repo
 #sudo sed -i 's/$releasever/6/g' /etc/yum.repos.d/epel-apache-maven.repo
 #sudo yum -y install apache-maven git
