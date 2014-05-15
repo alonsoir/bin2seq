@@ -79,7 +79,7 @@
 		<dependency>
 			<groupId>org.apache.commons</groupId>
 			<artifactId>commons-compress</artifactId>
-			<version>LATEST</version>
+			<version>1.8</version>
 		</dependency>
 		<dependency>
 			<groupId>com.googlecode.javacv</groupId>
