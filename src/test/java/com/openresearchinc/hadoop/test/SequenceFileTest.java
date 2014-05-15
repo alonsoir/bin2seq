@@ -3,10 +3,16 @@ package com.openresearchinc.hadoop.test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+
+import javax.imageio.ImageIO;
+import javax.imageio.stream.ImageInputStream;
 
 import ncsa.hdf.object.h5.H5File;
 
@@ -27,6 +33,7 @@ import ucar.nc2.NetcdfFile;
 import ucar.nc2.Variable;
 
 import com.openresearchinc.hadoop.sequencefile.OpenCV;
+import com.openresearchinc.hadoop.sequencefile.PPMImageReader;
 import com.openresearchinc.hadoop.sequencefile.Util;
 import com.openresearchinc.hadoop.sequencefile.hdf5_getters;
 
@@ -40,14 +47,6 @@ public class SequenceFileTest extends BaseTest {
 	final static Logger logger = Logger.getLogger(SequenceFileTest.class);
 
 	@Test
-	public void testTmp() throws Exception {
-
-		Map<Text, byte[]> ppm = Util.readSequenceFileFromS3("s3n://ori-hadoop/tmp/00001_930831_fa_a.ppm.seq");
-		Map<Text, byte[]> ncar = Util.readSequenceFileFromHDFS(hadoopMaster + "/tmp/ncar.seq");
-
-	}
-
-	@Test
 	/**
 	 *  Test image in compressed PPM format as used in NIST Colorferet database 
 	 *  Eclipse: -Djava.library.path=/home/heq/hadoop-2.2.0/lib/native
@@ -55,11 +54,14 @@ public class SequenceFileTest extends BaseTest {
 	 */
 	public void testFaceDetectionInPPMFromS3() throws Exception {
 		String file = "00001_930831_hl_a.ppm";
-		String inputURI = "s3://ori-colorferetsubset/00001/" + file + ".bz2";
+		String inputURI = "s3n://ori-colorferetsubset/00001/" + file + ".bz2";
 		String outputURI = hadoopMaster + "/tmp/" + file + ".seq";
 		Util.writeToSequenceFile(inputURI, outputURI, new SnappyCodec());
-		int faces = OpenCV.detectFaceInPPM(outputURI);
-		assertTrue(faces == 1);
+		byte[] ppmbytes = Util.readSequenceFileFromHDFS(outputURI);
+		ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(ppmbytes));
+		BufferedImage rawimage = PPMImageReader.read(iis);
+		List<int[]> faces = OpenCV.detectFace(rawimage);
+		assertTrue(faces.size() == 1);
 	}
 
 	@Test
@@ -74,18 +76,17 @@ public class SequenceFileTest extends BaseTest {
 		String inputURI = "file://" + new File(this.getClass().getResource("/lena.png").getFile()).getAbsolutePath();
 		String s3URI = "s3n://ori-tmp/lena.png.seq";
 		Util.writeToSequenceFile(inputURI, s3URI, new SnappyCodec());
-		int faces = OpenCV.detectFaceinPngJpgEtc(s3URI);
-		assertTrue(faces == 1);
+		byte[] pngbytes = Util.readSequenceFileFromS3(s3URI);
+		BufferedImage rawimage = ImageIO.read(new ByteArrayInputStream(pngbytes));
+		List<int[]> faces = OpenCV.detectFace(rawimage);
+		assertTrue(faces.size() == 1);
 
-		String hdfsURI = "s3n://ori-tmp/tmp/lena.png.seq";
+		String hdfsURI = hadoopMaster+"/tmp/lena.png.seq";
 		Util.writeToSequenceFile(inputURI, hdfsURI, new SnappyCodec());
-		faces = OpenCV.detectFaceinPngJpgEtc(hdfsURI);
-		assertTrue(faces == 1);
-	}
-
-	@Test
-	public void testBatchFaceDetectionFromHDFS() throws Exception {
-		OpenCV.detectFacesInDir(hadoopMaster + "/tmp/", "ppm.seq");
+		pngbytes = Util.readSequenceFileFromHDFS(hdfsURI);
+		rawimage = ImageIO.read(new ByteArrayInputStream(pngbytes));
+		faces = OpenCV.detectFace(rawimage);
+		assertTrue(faces.size() == 1);
 	}
 
 	@Test

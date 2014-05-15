@@ -187,8 +187,8 @@ public class SparkTest implements Serializable {
 			byte[] image = (byte[]) tuple._2();
 			ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(image));
 			BufferedImage rawimage = PPMImageReader.read(iis);
-			int faces = OpenCV.detectFace(rawimage);
-			Assert.assertTrue(faces >= 1);
+			List<int[]> faces = OpenCV.detectFace(rawimage);
+			Assert.assertTrue(faces.size() >= 1);
 		}
 	}
 
