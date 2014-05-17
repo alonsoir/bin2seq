@@ -97,10 +97,14 @@ public class SequenceFileTest extends BaseTest {
 	public void testCopyFilesRecursivelyFromS3() throws Exception {
 		List<String> ncfiles = Util.listFiles("s3://nasanex/NEX-DCP30/BCSD/rcp26/mon/atmos/pr/r1i1p1/v1.0/", "nc");
 		assertTrue(ncfiles.size() >= 100); // a lot
+		for (String url : ncfiles) {
+			String file = org.apache.commons.io.FilenameUtils.getBaseName(url);
+			Util.writeToSequenceFile(url, hadoopMaster + "/opennex/" + file + ".seq", new SnappyCodec());			
+		}
 
 		List<String> fileUrls = Util.listFiles("s3://ori-colorferetsubset/00001", "bz2");
 		for (String url : fileUrls) {
-			logger.info(url);
+			logger.debug(url);
 			String file = org.apache.commons.io.FilenameUtils.getBaseName(url);
 			Util.writeToSequenceFile(url, hadoopMaster + "/tmp/" + file + ".seq", new SnappyCodec());
 		}
@@ -206,11 +210,13 @@ public class SequenceFileTest extends BaseTest {
 
 	@Test
 	public void testGzipBzip2Lz4SnappyCodecs() throws Exception {
-		String path = this.getClass().getResource("/ncar.nc").getPath();
-		Util.writeToSequenceFile("file://" + path, hadoopMaster + "/tmp/ncar.seq", new GzipCodec());
-		Util.writeToSequenceFile("file://" + path, hadoopMaster + "/tmp/ncar.seq", new BZip2Codec());
-		Util.writeToSequenceFile("file://" + path, hadoopMaster + "/tmp/ncar.seq", new Lz4Codec());
-		Util.writeToSequenceFile("file://" + path, hadoopMaster + "/tmp/ncar.seq", new SnappyCodec());
+		//should work if all native in enabled by checking $hadoop checknative -a
+		String path = this.getClass().getResource("/ncar.nc").getPath();				
+		Util.writeToSequenceFile("file://" + path, hadoopMaster + "/tmp/ncar.nc.seq", new Lz4Codec());
+		Util.writeToSequenceFile("file://" + path, hadoopMaster + "/tmp/ncar.nc.seq", new BZip2Codec());
+		Util.writeToSequenceFile("file://" + path, hadoopMaster + "/tmp/ncar.nc.seq", new GzipCodec());
+		path = this.getClass().getResource("/TRAXLZU12903D05F94.h5").getPath();
+		Util.writeToSequenceFile("file://" + path, hadoopMaster + "/tmp/TRAXLZU12903D05F94.h5.seq", new SnappyCodec());
 	}
 
 	@Test
