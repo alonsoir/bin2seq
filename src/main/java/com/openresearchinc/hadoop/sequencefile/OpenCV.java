@@ -11,6 +11,7 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -25,7 +26,6 @@ import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.mapreduce.filecache.DistributedCache;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
@@ -104,21 +104,20 @@ public class OpenCV extends Configured implements Tool {
 			// log where mapper is executed
 			hostname = InetAddress.getLocalHost().getHostName();
 
-			// Have to use deprecated Hadoop API to get absolute path on native
-			// file system so opencv c library can load the classficifier configs. 
-			// Cache on HDFS does not help
-			Path[] caches = DistributedCache.getLocalCacheFiles(context.getConfiguration());
-			for (Path cache : caches) {
-				String path = cache.getName();
-				if (new File(path).exists()) {
-					if (logger.isDebugEnabled())
-						logger.debug("file exist:" + cache);
-					if (path.contains("haarcascade_frontalface_default.xml")) {
-						faceClassifier = new CvHaarClassifierCascade(cvLoad(path));
-					} else if (path.contains("haarcascade_eye.xml")) {
-						eyeClassifier = new CvHaarClassifierCascade(cvLoad(path));
-					}//TODO: other classifiers
+			URI[] fileURIs = context.getCacheFiles();
+			for (URI uri : fileURIs) {
+				String localPath = uri.getPath();
+				if (localPath.contains("haarcascade_frontalface_default.xml")) {
+					faceClassifier = new CvHaarClassifierCascade(cvLoad(uri.getPath()));
+				} else if (localPath.contains("haarcascade_eye.xml")) {
+					eyeClassifier = new CvHaarClassifierCascade(cvLoad(uri.getPath()));
+				} else {
+					// TODO
 				}
+			}
+			if (faceClassifier == null && eyeClassifier == null) {
+				logger.error("no detect classifier is defined");
+				System.exit(1);
 			}
 		}
 
