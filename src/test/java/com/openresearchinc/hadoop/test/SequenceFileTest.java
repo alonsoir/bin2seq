@@ -47,6 +47,11 @@ public class SequenceFileTest extends BaseTest {
 	final static Logger logger = Logger.getLogger(SequenceFileTest.class);
 
 	@Test
+	public void testTemp() throws Exception {
+		Util.crushFilesS3ToHDFS("ori-colorferetsubset", "", hadoopMaster + "/colorferet", new SnappyCodec());
+	}
+
+	@Test
 	/**
 	 *  Test image in compressed PPM format as used in NIST Colorferet database 
 	 *  Eclipse: -Djava.library.path=/home/heq/hadoop-2.2.0/lib/native
@@ -81,7 +86,7 @@ public class SequenceFileTest extends BaseTest {
 		List<int[]> faces = OpenCV.detectFace(rawimage);
 		assertTrue(faces.size() == 1);
 
-		String hdfsURI = hadoopMaster+"/tmp/lena.png.seq";
+		String hdfsURI = hadoopMaster + "/tmp/lena.png.seq";
 		Util.writeToSequenceFile(inputURI, hdfsURI, new SnappyCodec());
 		pngbytes = Util.readSequenceFileFromHDFS(hdfsURI);
 		rawimage = ImageIO.read(new ByteArrayInputStream(pngbytes));
@@ -99,7 +104,7 @@ public class SequenceFileTest extends BaseTest {
 		assertTrue(ncfiles.size() >= 100); // a lot
 		for (String url : ncfiles) {
 			String file = org.apache.commons.io.FilenameUtils.getBaseName(url);
-			Util.writeToSequenceFile(url, hadoopMaster + "/opennex/" + file + ".seq", new SnappyCodec());			
+			Util.writeToSequenceFile(url, hadoopMaster + "/opennex/" + file + ".seq", new SnappyCodec());
 		}
 
 		List<String> fileUrls = Util.listFiles("s3://ori-colorferetsubset/00001", "bz2");
@@ -210,8 +215,9 @@ public class SequenceFileTest extends BaseTest {
 
 	@Test
 	public void testGzipBzip2Lz4SnappyCodecs() throws Exception {
-		//should work if all native in enabled by checking $hadoop checknative -a
-		String path = this.getClass().getResource("/ncar.nc").getPath();				
+		// should work if all native in enabled by checking $hadoop checknative
+		// -a
+		String path = this.getClass().getResource("/ncar.nc").getPath();
 		Util.writeToSequenceFile("file://" + path, hadoopMaster + "/tmp/ncar.nc.seq", new Lz4Codec());
 		Util.writeToSequenceFile("file://" + path, hadoopMaster + "/tmp/ncar.nc.seq", new BZip2Codec());
 		Util.writeToSequenceFile("file://" + path, hadoopMaster + "/tmp/ncar.nc.seq", new GzipCodec());
