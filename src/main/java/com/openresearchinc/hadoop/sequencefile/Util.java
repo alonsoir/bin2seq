@@ -140,6 +140,65 @@ public class Util {
 		}
 	}
 
+	public static void crushFilesS3ToHDFS(String bucket, String prefix, String hdfsDir, CompressionCodec codec)
+			throws IOException {
+		Text key;
+		BytesWritable value;
+
+		conf.set("fs.defaultFS", "hdfs://" + hdfsDir.split("/")[2]);
+		Path outpath;
+		if (hdfsDir.startsWith("hdfs://"))
+			outpath = new Path(hdfsDir.replaceAll("hdfs://[a-z\\.\\:0-9]+", ""));
+		else
+			outpath = new Path(hdfsDir); // TODO nn:port is required for now
+
+		ObjectListing listing = s3Client.listObjects(bucket, prefix);
+		// list all objects recursively under bucket/prefix
+		List<S3ObjectSummary> summaries = listing.getObjectSummaries();
+		while (listing.isTruncated()) {// only if there are 1000+ objects
+			listing = s3Client.listNextBatchOfObjects(listing);
+			summaries.addAll(listing.getObjectSummaries());
+		}
+
+		int seq = 1;
+		int ballsize = 0; // total size of files packed into one sequencefile
+		int boxsize = 100000000; // 100MB uncompressed size to hold 'balls'
+
+		SequenceFile.Writer writer = SequenceFile.createWriter(conf,
+				SequenceFile.Writer.file(new Path(outpath + "/" + seq + ".seq")),
+				SequenceFile.Writer.compression(CompressionType.RECORD, codec),
+				SequenceFile.Writer.keyClass(Text.class), SequenceFile.Writer.valueClass(BytesWritable.class));
+
+		for (S3ObjectSummary summary : summaries) {
+			S3Object s3object = s3Client.getObject(summary.getBucketName(), summary.getKey());
+			InputStream objectContent = s3object.getObjectContent();
+			byte[] bytes = org.apache.commons.io.IOUtils.toByteArray(objectContent);
+			objectContent.close();
+			byte[] uncompressed;
+
+			if (summary.getKey().endsWith("bz2")) {
+				uncompressed = CompressUtil.unBZip2(bytes);
+			} else {
+				uncompressed = bytes;
+			}// TODO other compressors like gzip,
+			key = new Text(summary.getBucketName() + summary.getKey());
+			value = new BytesWritable(uncompressed);
+			if (ballsize > boxsize) {
+				IOUtils.closeStream(writer);
+				writer = SequenceFile.createWriter(conf,
+						SequenceFile.Writer.file(new Path(outpath + "/" + seq + ".seq")),
+						SequenceFile.Writer.compression(CompressionType.RECORD, codec),
+						SequenceFile.Writer.keyClass(Text.class), SequenceFile.Writer.valueClass(BytesWritable.class));
+				++seq;
+				ballsize = 0;
+			} else {
+				ballsize += summary.getSize();
+			}
+			writer.append(key, value);
+		}
+		IOUtils.closeStream(writer);
+	}
+
 	public static List<String> listFiles(String dir, String ext) throws Exception {
 		List<String> uri = new ArrayList<String>();
 
