@@ -48,7 +48,11 @@ public class SequenceFileTest extends BaseTest {
 
 	@Test
 	public void testTemp() throws Exception {
-		Util.crushFilesS3ToHDFS("ori-colorferetsubset", "", hadoopMaster + "/colorferet", new SnappyCodec());
+		int size = (int) Math.floor(Integer.MAX_VALUE * 0.9);
+		byte[] buffer = new byte[size];
+		logger.info("length=" + buffer.length);
+		// Util.crushFilesS3ToHDFS("ori-colorferetsubset", "", hadoopMaster +
+		// "/colorferet", new SnappyCodec());
 	}
 
 	@Test

@@ -89,9 +89,9 @@ public class OpenCV extends Configured implements Tool {
 		FileInputFormat.addInputPath(job, new Path(args[0]));
 		FileOutputFormat.setOutputPath(job, new Path(args[1]));
 
-		job.addCacheFile(new File(OpenCV.class.getResource("/haarcascade_frontalface_default.xml").getFile()).toURI());
-		job.addCacheFile(new File(OpenCV.class.getResource("/haarcascade_eye.xml").getFile()).toURI());
-
+		job.addCacheFile(new URI(
+				"s3n://ori-haarcascade/haarcascade_frontalface_default.xml#haarcascade_frontalface_default.xml"));
+		job.addCacheFile(new URI("s3n://ori-haarcascade/haarcascade_eye.xml#haarcascade_eye.xml"));
 		job.waitForCompletion(true);
 		return 0;
 
@@ -108,9 +108,11 @@ public class OpenCV extends Configured implements Tool {
 			for (URI uri : fileURIs) {
 				String localPath = uri.getPath();
 				if (localPath.contains("haarcascade_frontalface_default.xml")) {
-					faceClassifier = new CvHaarClassifierCascade(cvLoad(uri.getPath()));
+					faceClassifier = new CvHaarClassifierCascade(cvLoad(new File(
+							"./haarcascade_frontalface_default.xml").getAbsolutePath()));
 				} else if (localPath.contains("haarcascade_eye.xml")) {
-					eyeClassifier = new CvHaarClassifierCascade(cvLoad(uri.getPath()));
+					eyeClassifier = new CvHaarClassifierCascade(
+							cvLoad(new File("./haarcascade_eye.xml").getAbsolutePath()));
 				} else {
 					// TODO
 				}
