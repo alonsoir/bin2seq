@@ -125,6 +125,8 @@ public class OpenCV extends Configured implements Tool {
 
 		public void map(Text key, BytesWritable value, Context context) throws IOException, InterruptedException {
 			String filename = key.toString();
+			if (filename.contains("$folder$"))// TODO need better treatment.
+				return; // skip non-file dir info stored in sequencefile
 			Text outputkey = new Text(key);
 			Text outputvalue = new Text();
 			List<int[]> faces = new ArrayList<int[]>();

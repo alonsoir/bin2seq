@@ -51,7 +51,8 @@
 							different systems. -->
 						<!--e.g., libjhdf5.so is /usr/lib/jni (Ubuntu) or /usr/lib64/jhdf5 
 							(amzn Linux) -->
-						<argLine>-Xms4096m -Djava.library.path=${env.HADOOP_HOME}/lib/native:${env.LD_LIBRARY_PATH}</argLine>
+						<argLine>-Xms4096m
+							-Djava.library.path=${env.HADOOP_HOME}/lib/native:${env.LD_LIBRARY_PATH}</argLine>
 						<additionalClasspathElements>
 							<additionalClasspathElement>${env.JAVACV_BIN_HOME}/javacv.jar</additionalClasspathElement>
 							<additionalClasspathElement>${env.JAVACV_BIN_HOME}/javacpp.jar</additionalClasspathElement>
@@ -71,6 +72,11 @@
 	</properties>
 
 	<dependencies>
+		<dependency>
+			<groupId>com.google.guava</groupId>
+			<artifactId>guava</artifactId>
+			<version>17.0</version>
+		</dependency>
 		<dependency>
 			<groupId>org.apache.spark</groupId>
 			<artifactId>spark-core_2.10</artifactId>

@@ -96,8 +96,9 @@ public class HDF5 extends Configured implements Tool {
 		}
 
 		public void map(Text key, BytesWritable value, Context context) throws IOException, InterruptedException {
-
 			String filename = key.toString();
+			if (filename.contains("$folder$"))// TODO need better treatment.
+				return; // skip non-file dir info stored in sequencefile
 			byte[] bytes = value.getBytes();
 			Text outputkey = new Text(key);
 			Text outputvalue = new Text();
