@@ -51,7 +51,7 @@
 							different systems. -->
 						<!--e.g., libjhdf5.so is /usr/lib/jni (Ubuntu) or /usr/lib64/jhdf5 
 							(amzn Linux) -->
-						<argLine>-Xms4096m
+						<argLine>-Xms1024m -Xmx4096m
 							-Djava.library.path=${env.HADOOP_HOME}/lib/native:${env.LD_LIBRARY_PATH}</argLine>
 						<additionalClasspathElements>
 							<additionalClasspathElement>${env.JAVACV_BIN_HOME}/javacv.jar</additionalClasspathElement>
@@ -73,9 +73,9 @@
 
 	<dependencies>
 		<dependency>
-			<groupId>com.google.guava</groupId>
-			<artifactId>guava</artifactId>
-			<version>17.0</version>
+			<groupId>commons-io</groupId>
+			<artifactId>commons-io</artifactId>
+			<version>2.4</version>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.spark</groupId>
@@ -117,6 +117,11 @@
 		</dependency>
 
 		<!-- Hadoop -->
+		<dependency> <!-- to have CBZip2InputStream et. -->
+			<groupId>org.apache.ant</groupId>
+			<artifactId>ant</artifactId>
+			<version>LATEST</version>
+		</dependency> 
 		<dependency>
 			<groupId>org.apache.hadoop</groupId>
 			<artifactId>hadoop-common</artifactId>

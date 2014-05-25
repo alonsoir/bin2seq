@@ -10,8 +10,8 @@ package com.openresearchinc.hadoop.sequencefile;
 //3. include more compression modules: bz2, snappy, ... 
 
 import java.io.BufferedInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileFilter;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -34,6 +34,7 @@ import javax.xml.xpath.XPathFactory;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
@@ -41,7 +42,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.BytesWritable;
-import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.SequenceFile.CompressionType;
 import org.apache.hadoop.io.Text;
@@ -64,7 +64,8 @@ import com.amazonaws.services.s3.model.ListObjectsRequest;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
-import com.google.common.io.ByteStreams;
+
+import org.apache.tools.bzip2.CBZip2InputStream;
 
 //@formatter:off
 /**
@@ -137,8 +138,8 @@ public class Util {
 		int extPos = argList.indexOf("-ext");
 		if (packPos != -1 && extPos != -1 && inputURI.startsWith("s3")) {
 			String ext = otherArgs[extPos + 1];
-			logger.info("ext="+ext);
-			crushFilesS3ToHDFS(inputURI, getHadoopMasterURI()+outputURI, ext, compression);
+			logger.info("ext=" + ext);
+			crushFilesS3ToHDFS(inputURI, getHadoopMasterURI() + outputURI, ext, compression);
 		} else {
 			Pattern allfiles = Pattern.compile("/\\*.[A-Za-z0-9]+$");
 			Matcher matcher = allfiles.matcher(inputURI);
@@ -163,8 +164,9 @@ public class Util {
 	 * @return
 	 */
 	public static String getHadoopMasterURI() {
-		HashMap<String, String> hm = parseHadoopConf();
-		return hm.get("fs.default.name");
+		String master = parseHadoopConf("core-site.xml", "fs.default.name");
+		logger.info("Hadoop Cluster Master URI=" + master);
+		return master;
 	}
 
 	/**
@@ -174,53 +176,32 @@ public class Util {
 	 */
 	public static int getHDFSBlockSize() {
 		int size = 64 * 1024 * 1024; // default Apache Hadoop HDFS block size
-		HashMap<String, String> hm = parseHadoopConf();
-		String mb = hm.get("dfs.block.size"); // size in MB
+		String mb = parseHadoopConf("hdfs-site.xml", "dfs.block.size");
 		if (org.apache.commons.lang3.StringUtils.containsIgnoreCase(mb, "MB")) {
 			size = Integer.parseInt(mb.replaceAll("[^\\d.]", ""));
+			logger.info("HDFS block size=" + size);
 		} else {
 			logger.warn("dfs.block.size in core-site.xml is not specified or not in 'MB', use default 64MB HDFS block size");
 		}
 		return size;
 	}
 
-	static HashMap<String, String> parseHadoopConf() {
-		HashMap<String, String> hm = new HashMap<String, String>();
-
+	static String parseHadoopConf(String hadoopconf, String key) {
 		File hadoopHomeDir = new File(System.getenv("HADOOP_HOME") + "/etc/hadoop");
-		if (hadoopHomeDir.isDirectory()) {
-			File[] files = hadoopHomeDir.listFiles(new FileFilter() {
-				public boolean accept(File file) {
-					return file.getName().endsWith("core-site.xml");
-				}
-			});
-			if (files.length == 1) {
-				try {
-					XPathFactory xpf = XPathFactory.newInstance();
-					XPath xpath = xpf.newXPath();
-
-					XPathExpression xpe = xpath.compile("//property[name/text()='fs.default.name']/value");
-					InputSource coresitexml = new InputSource(new FileReader(files[0]));
-					hm.put("fs.default.name", xpe.evaluate(coresitexml));
-
-					xpe = xpath.compile("//property[name/text()='dfs.block.size']/value");
-					coresitexml = new InputSource(new FileReader(files[0]));
-					hm.put("dfs.block.size", xpe.evaluate(coresitexml));
-				} catch (IOException ioe) {
-					logger.error("Cannot find core-site.xml under $HADOOP_HOME");
-					System.exit(1);
-				} catch (XPathExpressionException e) {
-					logger.error("Error when parsing core-site.xml under $HADOOP_HOME");
-					System.exit(1);
-				}
-			} else {
-				logger.error("Cannot find fs.default.name in core-site.xml");
-				System.exit(1);
-			}
-		} else {
-			logger.warn("$HADOOP_HOME is NOT defeined");
+		try {
+			XPathFactory xpf = XPathFactory.newInstance();
+			XPath xpath = xpf.newXPath();
+			XPathExpression xpe = xpath.compile("//property[name/text()='" + key + "']/value");
+			InputSource coresitexml = new InputSource(new FileReader(hadoopHomeDir + "/" + hadoopconf));
+			return xpe.evaluate(coresitexml);
+		} catch (IOException ioe) {
+			logger.error("Cannot find " + hadoopconf + " under $HADOOP_HOME");
+			System.exit(1);
+		} catch (XPathExpressionException e) {
+			logger.error("Error when parsing" + hadoopconf + " under $HADOOP_HOME");
+			System.exit(1);
 		}
-		return hm;
+		return null;
 	}
 
 	public static void crushFilesS3ToHDFS(String s3URI, String hdfsDir, String ext, CompressionCodec codec)
@@ -235,7 +216,6 @@ public class Util {
 		else
 			outpath = new Path(hdfsDir); // TODO nn:port is required for now
 
-		// String bucket = s3URI.split("/")[2];
 		List<String> argsList = new LinkedList<String>(Arrays.asList(s3URI.split("/")));
 		String bucket = argsList.get(2);
 		argsList.remove(0);
@@ -251,9 +231,8 @@ public class Util {
 		}
 
 		int seq = 1;
-		int ballsize = 0; // total size of files packed into one sequencefile
-		int boxsize = getHDFSBlockSize();// 128MB EMR HDFS default block size to
-											// max locality
+		int ballsize = 0; // total size of files packed into one SequenceFile
+		int boxsize = getHDFSBlockSize();										
 
 		SequenceFile.Writer writer = SequenceFile.createWriter(conf,
 				SequenceFile.Writer.file(new Path(outpath + "/" + seq + ".seq")),
@@ -261,26 +240,30 @@ public class Util {
 				SequenceFile.Writer.keyClass(Text.class), SequenceFile.Writer.valueClass(BytesWritable.class));
 
 		for (S3ObjectSummary summary : summaries) {
-			if (!summary.getKey().endsWith(ext))
-				continue;// only pack files with specified extension
+			String filename = summary.getKey();
+			if (!filename.contains("." + ext))
+				continue;
 			S3Object s3object = s3Client.getObject(summary.getBucketName(), summary.getKey());
 			InputStream objectContent = s3object.getObjectContent();
-			// byte[] bytes
-			// =org.apache.commons.io.IOUtils.toByteArray(objectContent);
-			byte[] bytes = ByteStreams.toByteArray(objectContent);
-			// byte[] bytes=readLargeData(objectContent);
-			objectContent.close();
-			byte[] uncompressed;
-
-			if (summary.getKey().endsWith("bz2")) {
-				uncompressed = CompressUtil.unBZip2(bytes);
+			ByteArrayOutputStream baos = new ByteArrayOutputStream();
+			if (filename.endsWith(".bz2")) {
+				objectContent.read();// read two bytes as a workround to deal
+				objectContent.read();// with bzip2 size issue
+				IOUtils.copyLarge(new CBZip2InputStream(objectContent), baos);
+			} else if (filename.endsWith(".gz")) {
+				IOUtils.copyLarge(new java.util.zip.GZIPInputStream(objectContent), baos);
 			} else {
-				uncompressed = bytes;
-			}// TODO other compressors like gzip,
+				IOUtils.copyLarge(objectContent, baos);
+			}//TODO: other compressors
+			IOUtils.copyLarge(objectContent, baos);
+			objectContent.close();
+			
 			key = new Text(summary.getBucketName() + summary.getKey());
-			value = new BytesWritable(uncompressed);
+			value = new BytesWritable(baos.toByteArray());
+			ballsize += baos.size();
 			if (ballsize > boxsize) {
-				IOUtils.closeStream(writer);
+				writer.append(key, value);
+				writer.close();
 				writer = SequenceFile.createWriter(conf,
 						SequenceFile.Writer.file(new Path(outpath + "/" + seq + ".seq")),
 						SequenceFile.Writer.compression(CompressionType.RECORD, codec),
@@ -288,11 +271,10 @@ public class Util {
 				++seq;
 				ballsize = 0;
 			} else {
-				ballsize += uncompressed.length;
+				writer.append(key, value);
 			}
-			writer.append(key, value);
 		}
-		IOUtils.closeStream(writer);
+		writer.close();
 	}
 
 	static byte[] readLargeData(InputStream is) throws IOException {
@@ -427,7 +409,7 @@ public class Util {
 				SequenceFile.Writer.compression(CompressionType.RECORD, codec),
 				SequenceFile.Writer.keyClass(Text.class), SequenceFile.Writer.valueClass(BytesWritable.class));
 		writer.append(key, value);
-		IOUtils.closeStream(writer);
+		org.apache.hadoop.io.IOUtils.closeStream(writer);
 	}
 
 	public static void listSequenceFileKeys(String sequenceFileURI) throws Exception {
@@ -453,7 +435,7 @@ public class Util {
 		while (reader.next(key)) {
 			logger.info("key : " + key.toString());
 		}
-		IOUtils.closeStream(reader);
+		org.apache.hadoop.io.IOUtils.closeStream(reader);
 	}
 
 	public static byte[] readSequenceFileFromS3(String s3URI) throws IOException {
@@ -503,7 +485,7 @@ public class Util {
 				logger.debug("key : " + key.toString() + " - value size: " + value.getBytes().length);
 			return value.getBytes();
 		}
-		IOUtils.closeStream(reader);
+		org.apache.hadoop.io.IOUtils.closeStream(reader);
 		return null;
 	}
 
@@ -535,7 +517,7 @@ public class Util {
 				logger.debug("key : " + key.toString() + " - value size: " + value.getBytes().length);
 			map.put(key, value.getBytes());
 		}
-		IOUtils.closeStream(reader);
+		org.apache.hadoop.io.IOUtils.closeStream(reader);
 		return map;
 	}
 
