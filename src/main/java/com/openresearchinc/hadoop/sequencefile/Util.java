@@ -10,7 +10,6 @@ package com.openresearchinc.hadoop.sequencefile;
 //3. include more compression modules: bz2, snappy, ... 
 
 import java.io.BufferedInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
@@ -52,6 +51,7 @@ import org.apache.hadoop.io.compress.GzipCodec;
 import org.apache.hadoop.io.compress.SnappyCodec;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.ReflectionUtils;
+import org.apache.tools.bzip2.CBZip2InputStream;
 import org.slf4j.Logger;
 import org.xml.sax.InputSource;
 
@@ -64,8 +64,6 @@ import com.amazonaws.services.s3.model.ListObjectsRequest;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
-
-import org.apache.tools.bzip2.CBZip2InputStream;
 
 //@formatter:off
 /**
@@ -180,8 +178,10 @@ public class Util {
 		if (org.apache.commons.lang3.StringUtils.containsIgnoreCase(mb, "MB")) {
 			size = Integer.parseInt(mb.replaceAll("[^\\d.]", ""));
 			logger.info("HDFS block size=" + size);
+		} else if (mb.matches("\\d+")) {
+			size = Integer.parseInt(mb);
 		} else {
-			logger.warn("dfs.block.size in core-site.xml is not specified or not in 'MB', use default 64MB HDFS block size");
+			logger.warn("dfs.block.size in hdfs-site.xml is not specified or not in 'MB', use default 64MB HDFS block size");
 		}
 		return size;
 	}
@@ -207,7 +207,7 @@ public class Util {
 	public static void crushFilesS3ToHDFS(String s3URI, String hdfsDir, String ext, CompressionCodec codec)
 			throws IOException {
 		Text key;
-		BytesWritable value;
+		BytesWritable value = new BytesWritable();
 
 		conf.set("fs.defaultFS", getHadoopMasterURI());
 		Path outpath;
@@ -232,7 +232,7 @@ public class Util {
 
 		int seq = 1;
 		int ballsize = 0; // total size of files packed into one SequenceFile
-		int boxsize = getHDFSBlockSize();										
+		int boxsize = getHDFSBlockSize();
 
 		SequenceFile.Writer writer = SequenceFile.createWriter(conf,
 				SequenceFile.Writer.file(new Path(outpath + "/" + seq + ".seq")),
@@ -245,22 +245,41 @@ public class Util {
 				continue;
 			S3Object s3object = s3Client.getObject(summary.getBucketName(), summary.getKey());
 			InputStream objectContent = s3object.getObjectContent();
-			ByteArrayOutputStream baos = new ByteArrayOutputStream();
+
+			logger.info("Allocating memory to hold S3 data" + summary.getSize());
+			byte[] bytes = new byte[(int) summary.getSize()];
+			logger.info("memory is succssfully allocated with size=" + bytes.length);
 			if (filename.endsWith(".bz2")) {
 				objectContent.read();// read two bytes as a workround to deal
 				objectContent.read();// with bzip2 size issue
-				IOUtils.copyLarge(new CBZip2InputStream(objectContent), baos);
+				InputStream is = new CBZip2InputStream(objectContent);
+				int offset = 0;
+				int numRead = 0;
+				while (offset < bytes.length && (numRead = IOUtils.read(is, bytes, offset, bytes.length - offset)) >= 0) {
+					value = new BytesWritable(bytes, offset);
+					offset += numRead;
+				}
 			} else if (filename.endsWith(".gz")) {
-				IOUtils.copyLarge(new java.util.zip.GZIPInputStream(objectContent), baos);
+				InputStream is = new java.util.zip.GZIPInputStream(objectContent);
+				int offset = 0;
+				int numRead = 0;
+				while (offset < bytes.length && (numRead = IOUtils.read(is, bytes, offset, bytes.length - offset)) >= 0) {
+					value = new BytesWritable(bytes, offset);
+					offset += numRead;
+				}
 			} else {
-				IOUtils.copyLarge(objectContent, baos);
-			}//TODO: other compressors
-			IOUtils.copyLarge(objectContent, baos);
+				int offset = 0;
+				int numRead = 0;
+				while (offset < bytes.length
+						&& (numRead = IOUtils.read(objectContent, bytes, offset, bytes.length - offset)) >= 0) {
+					value = new BytesWritable(bytes, offset);
+					offset += numRead;
+				}
+			}// TODO: other compressors
 			objectContent.close();
-			
+
 			key = new Text(summary.getBucketName() + summary.getKey());
-			value = new BytesWritable(baos.toByteArray());
-			ballsize += baos.size();
+			ballsize += bytes.length;
 			if (ballsize > boxsize) {
 				writer.append(key, value);
 				writer.close();
