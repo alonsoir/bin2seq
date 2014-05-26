@@ -33,7 +33,6 @@ import javax.xml.xpath.XPathFactory;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
-import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
@@ -41,6 +40,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.BytesWritable;
+import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.SequenceFile.CompressionType;
 import org.apache.hadoop.io.Text;
@@ -70,7 +70,7 @@ import com.amazonaws.services.s3.model.S3ObjectSummary;
  * export LIBJARS=/path/jar1,/path/jar2 
  * export LIBJARS=~/.m2/repository/com/amazonaws/aws-java-sdk/1.0.002/aws-java-sdk-1.0.002.jar 
  * export HADOOP_CLASSPATH=`echo ${LIBJARS} | sed s/,/:/g`
- * $hadoop jar <path>/bin2seq.jar com.openresearchinc.hadoop.sequencefile.Util -in <inuri> -out <outuri> -codec <default|gzip|bz2|snappy> -libjars $LIBJARS"
+ * $hadoop jar <path>/bin2seq.jar com.openresearchinc.hadoop.sequencefile.Util [-pack] -in <inuri> -out <outuri> -codec <default|gzip|bz2|snappy> -libjars $LIBJARS"
  * 
  * @author heq 
  */
@@ -84,61 +84,60 @@ public class Util {
 			System.getenv("AWS_SECRET_KEY")), new ClientConfiguration());
 
 	public static void main(String[] args) throws Exception {
-		String usage = "Usage: hadoop jar ./target/bin2seq*.jar com.openresearchinc.hadoop.sequencefile.Util -pack -in <input-uri> -ext <ext> -out <output-uri> -codec <gzip|bz2|snappy>";
+		String usage = "Usage: hadoop jar ./target/bin2seq*.jar com.openresearchinc.hadoop.sequencefile.Util -pack|-list -in <input-uri> -ext <ext> -out <output-uri> -codec <gzip|bz2|snappy>";
 		String inputURI = null, outputURI = null, codec = null;
 		CompressionCodec compression = null;
 		String[] otherArgs = new GenericOptionsParser(conf, args).getRemainingArgs();
 
 		List<String> argList = Arrays.asList(otherArgs);
-		int pos = argList.indexOf("-in");
-		if (pos == -1) {
-			System.err.println(usage);
-			System.exit(2);
-		}
-		inputURI = otherArgs[pos + 1];
+		int pos;
+		if ((pos = argList.indexOf("-in")) != -1)
+			inputURI = otherArgs[pos + 1];
 
-		pos = argList.indexOf("-out");
-		if (pos == -1) {
-			System.err.println(usage);
-			System.exit(2);
-		}
-		outputURI = otherArgs[pos + 1];
-		if (pos == -1) {
-			System.err.println(usage);
-			System.exit(2);
-		}
+		if ((pos = argList.indexOf("-out")) != -1)
+			outputURI = otherArgs[pos + 1];
 
-		pos = argList.indexOf("-codec");
-		if (pos == -1) {
-			System.err.println(usage);
-			System.exit(2);
-		}
-		codec = otherArgs[pos + 1];
-		switch (codec.toLowerCase()) {
-		case "gzip":
-			compression = new GzipCodec();
-			break;
-		case "bz2":
-			compression = new BZip2Codec();
-			break;
-		case "snappy":
-			compression = new SnappyCodec();
-			break;
-		case "default":
-			compression = new DefaultCodec();
-			break;
-		default:
-			System.err.println(usage);
-			System.exit(2);
+		if ((pos = argList.indexOf("-codec")) != -1) {
+			codec = otherArgs[pos + 1];
+			switch (codec.toLowerCase()) {
+			case "gzip":
+				compression = new GzipCodec();
+				break;
+			case "bz2":
+				compression = new BZip2Codec();
+				break;
+			case "snappy":
+				compression = new SnappyCodec();
+				break;
+			case "default":
+				compression = new DefaultCodec();
+				break;
+			default:
+				System.err.println(usage);
+				System.exit(2);
+			}
 		}
 
-		int packPos = argList.indexOf("-pack");
-		int extPos = argList.indexOf("-ext");
-		if (packPos != -1 && extPos != -1 && inputURI.startsWith("s3")) {
-			String ext = otherArgs[extPos + 1];
+		if (inputURI != null && argList.indexOf("-list") != -1) {
+			listSequenceFileKeys(inputURI);
+			System.exit(0);
+		} else {
+			System.err.println(usage);
+			System.exit(1);
+		}
+
+		if (argList.indexOf("-pack") != -1 && (pos = argList.indexOf("-ext")) != -1 && inputURI != null
+				&& outputURI != null && inputURI.startsWith("s3")) {
+			String ext = otherArgs[pos + 1];
 			logger.info("ext=" + ext);
 			crushFilesS3ToHDFS(inputURI, getHadoopMasterURI() + outputURI, ext, compression);
+			System.exit(0);
 		} else {
+			System.err.println(usage);
+			System.exit(1);
+		}
+
+		if (inputURI != null && outputURI != null && codec != null) {
 			Pattern allfiles = Pattern.compile("/\\*.[A-Za-z0-9]+$");
 			Matcher matcher = allfiles.matcher(inputURI);
 			if (matcher.find()) {
@@ -153,7 +152,11 @@ public class Util {
 				String filename = new File(inputURI).getName();
 				Util.writeToSequenceFile(inputURI, outputURI + "/" + filename + ".seq", compression);
 			}
+		} else {
+			System.err.println(usage);
+			System.exit(1);
 		}
+
 	}
 
 	/**
@@ -177,12 +180,12 @@ public class Util {
 		String mb = parseHadoopConf("hdfs-site.xml", "dfs.block.size");
 		if (org.apache.commons.lang3.StringUtils.containsIgnoreCase(mb, "MB")) {
 			size = Integer.parseInt(mb.replaceAll("[^\\d.]", ""));
-			logger.info("HDFS block size=" + size);
 		} else if (mb.matches("\\d+")) {
 			size = Integer.parseInt(mb);
 		} else {
 			logger.warn("dfs.block.size in hdfs-site.xml is not specified or not in 'MB', use default 64MB HDFS block size");
 		}
+		logger.info("HDFS block size=" + size);
 		return size;
 	}
 
@@ -243,39 +246,28 @@ public class Util {
 			String filename = summary.getKey();
 			if (!filename.contains("." + ext))
 				continue;
+			if (logger.isDebugEnabled())
+				logger.debug("filename=" + filename);
 			S3Object s3object = s3Client.getObject(summary.getBucketName(), summary.getKey());
 			InputStream objectContent = s3object.getObjectContent();
 
-			logger.info("Allocating memory to hold S3 data" + summary.getSize());
+			logger.info("Allocating memory to hold S3 data=" + summary.getSize());
 			byte[] bytes = new byte[(int) summary.getSize()];
 			logger.info("memory is succssfully allocated with size=" + bytes.length);
 			if (filename.endsWith(".bz2")) {
 				objectContent.read();// read two bytes as a workround to deal
 				objectContent.read();// with bzip2 size issue
 				InputStream is = new CBZip2InputStream(objectContent);
-				int offset = 0;
-				int numRead = 0;
-				while (offset < bytes.length && (numRead = IOUtils.read(is, bytes, offset, bytes.length - offset)) >= 0) {
-					value = new BytesWritable(bytes, offset);
-					offset += numRead;
-				}
+				IOUtils.readFully(is, bytes, 0, bytes.length);
+				value = new BytesWritable(bytes);
 			} else if (filename.endsWith(".gz")) {
-				InputStream is = new java.util.zip.GZIPInputStream(objectContent);
-				int offset = 0;
-				int numRead = 0;
-				while (offset < bytes.length && (numRead = IOUtils.read(is, bytes, offset, bytes.length - offset)) >= 0) {
-					value = new BytesWritable(bytes, offset);
-					offset += numRead;
-				}
+				IOUtils.readFully(new java.util.zip.GZIPInputStream(objectContent), bytes, 0, bytes.length);
+				value = new BytesWritable(bytes);
+				// }else if {// TODO:other compressors
 			} else {
-				int offset = 0;
-				int numRead = 0;
-				while (offset < bytes.length
-						&& (numRead = IOUtils.read(objectContent, bytes, offset, bytes.length - offset)) >= 0) {
-					value = new BytesWritable(bytes, offset);
-					offset += numRead;
-				}
-			}// TODO: other compressors
+				IOUtils.readFully(objectContent, bytes, 0, bytes.length);
+				value = new BytesWritable(bytes);
+			}
 			objectContent.close();
 
 			key = new Text(summary.getBucketName() + summary.getKey());
