@@ -51,8 +51,10 @@ public class SequenceFileTest extends BaseTest {
 		// int size = (int) Math.floor(Integer.MAX_VALUE * 0.9);
 		// byte[] buffer = new byte[size];
 		// logger.info("dummy");
-		Util.crushFilesS3ToHDFS("s3n://ori-colorferetsubset/00001/", "/output", "ppm.bz2", new SnappyCodec());
-		Util.listSequenceFileKeys(hadoopMaster+"/output/1.seq");		
+		//Util.packS3FilesToHDFS("s3://ori-msd10k-h5/data/A/A/", "/output", "h5", new SnappyCodec());
+		Util.packS3FilesToHDFS("s3://ori-colorferetsubset/", "/output", "ppm.bz2", new SnappyCodec());
+		Util.listSequenceFileKeys(hadoopMaster+"/output/1.seq");
+		// Util.listSequenceFileKeys(hadoopMaster+"/tmp/99.seq");
 	}
 
 	@Test
