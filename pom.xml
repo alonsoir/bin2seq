@@ -21,6 +21,10 @@
 			<name>central</name>
 			<url>http://repo1.maven.org/maven2/</url>
 		</repository>
+		<repository>
+			<id>clojars.org</id>
+			<url>http://clojars.org/repo</url>
+		</repository>
 	</repositories>
 
 	<build>
@@ -34,6 +38,7 @@
 					<include>*.ppm</include>
 					<include>*.nc</include>
 					<include>*.h5</include>
+					<include>*.tif</include>
 				</includes>
 			</resource>
 		</resources>
@@ -77,6 +82,11 @@
 	</properties>
 
 	<dependencies>
+		<dependency>
+			<groupId>ratel</groupId>
+			<artifactId>gdal</artifactId>
+			<version>1.9.1</version>
+		</dependency>
 		<dependency>
 			<groupId>org.apache.commons</groupId>
 			<artifactId>commons-lang3</artifactId>
