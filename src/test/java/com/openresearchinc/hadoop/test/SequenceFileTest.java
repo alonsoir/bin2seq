@@ -6,7 +6,7 @@ import static org.junit.Assert.assertTrue;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.File;
-import java.net.URI;
+import java.io.FileInputStream;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -17,6 +17,7 @@ import javax.imageio.stream.ImageInputStream;
 import ncsa.hdf.object.h5.H5File;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.compress.BZip2Codec;
 import org.apache.hadoop.io.compress.DefaultCodec;
@@ -24,6 +25,7 @@ import org.apache.hadoop.io.compress.GzipCodec;
 import org.apache.hadoop.io.compress.Lz4Codec;
 import org.apache.hadoop.io.compress.SnappyCodec;
 import org.apache.log4j.Logger;
+import org.gdal.gdal.Dataset;
 import org.junit.Test;
 
 import ucar.ma2.Array;
@@ -48,13 +50,19 @@ public class SequenceFileTest extends BaseTest {
 
 	@Test
 	public void testTemp() throws Exception {
-		// int size = (int) Math.floor(Integer.MAX_VALUE * 0.9);
-		// byte[] buffer = new byte[size];
-		// logger.info("dummy");
-		//Util.packS3FilesToHDFS("s3://ori-msd10k-h5/data/A/A/", "/output", "h5", new SnappyCodec());
-		Util.packS3FilesToHDFS("s3://ori-colorferetsubset/", "/output", "ppm.bz2", new SnappyCodec());
-		Util.listSequenceFileKeys(hadoopMaster+"/output/1.seq");
-		// Util.listSequenceFileKeys(hadoopMaster+"/tmp/99.seq");
+		Util.packS3FilesToHDFS("s3://nasanex/NEX-DCP30/BCSD/rcp26/mon/atmos/pr/r1i1p1/v1.0/", "/output", "nc", new SnappyCodec());
+		Util.listSequenceFileKeys(hadoopMaster + "/output/1.seq");
+	}
+
+	@Test
+	public void testNASALandsatTiff() throws Exception {
+		org.gdal.gdal.gdal.AllRegister();
+		String path = new File(this.getClass().getResource("/p132r058_3dm19790123_z48_10.tif").getPath())
+				.getAbsolutePath();
+		byte[] bytes = IOUtils.toByteArray(new FileInputStream(path));
+		org.gdal.gdal.gdal.FileFromMemBuffer("/vsimem/geotiffinmem", bytes);
+		Dataset dataset = org.gdal.gdal.gdal.Open("/vsimem/geotiffinmem");
+		assertEquals(1, dataset.getRasterCount());
 	}
 
 	@Test
@@ -182,9 +190,19 @@ public class SequenceFileTest extends BaseTest {
 	/**
 	 * TODO: python API: http://stackoverflow.com/questions/16654251/can-h5py-load-a-file-from-a-byte-array-in-memory
 	 * @throws Exception
+	 */	
+	public void testNASAModisHDFAccess() throws Exception {
+		File file = new File(this.getClass().getResource("/MYD13Q1.A2014121.h23v04.005.2014138045119.hdf").getPath());
+		byte[] netcdfinbyte = FileUtils.readFileToByteArray(file);
+		NetcdfFile netCDFfile = NetcdfFile.openInMemory("inmemory.hdf", netcdfinbyte);
+		//TODO Processing hdf files
+	}
+	@Test
+	/**
+	 * TODO: python API: http://stackoverflow.com/questions/16654251/can-h5py-load-a-file-from-a-byte-array-in-memory
+	 * @throws Exception
 	 */
 	public void testNetCDFInterfaceToACcessH5() throws Exception {
-		logger.info("java.library.path=" + System.getProperty("java.library.path"));
 		H5File h5 = hdf5_getters.hdf5_open_readonly(this.getClass().getResource("/TRAXLZU12903D05F94.h5").getPath());
 		double h5_temp = hdf5_getters.get_tempo(h5);
 

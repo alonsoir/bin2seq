@@ -10,8 +10,9 @@ package com.openresearchinc.hadoop.sequencefile;
 //3. include more compression modules: bz2, snappy, ... 
 
 import java.io.BufferedInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -221,6 +222,7 @@ public class Util {
 	 * @param s3URI
 	 * @param hdfsDir
 	 * @param ext
+	 *            case-insensitive filename extension, e.g., nc, or TIF, 
 	 * @param codec
 	 * @throws IOException
 	 */
@@ -264,7 +266,7 @@ public class Util {
 				while ((tarArchiveEntry = tarArchiveInputStream.getNextTarEntry()) != null) {
 					// for each file in tar
 					if (!tarArchiveEntry.isDirectory()// not a dir and match ext
-							&& tarArchiveEntry.getName().contains(ext)) {
+							&& tarArchiveEntry.getName().toLowerCase().contains(ext.toLowerCase())) {
 						byte[] bytes = new byte[(int) tarArchiveEntry.getSize()];
 						tarArchiveInputStream.read(bytes);
 						if (packingManyFilesToOneSequenceFile(writer, filename, bytes) == 0) {
@@ -276,7 +278,7 @@ public class Util {
 				tarArchiveInputStream.close();
 				writer.close();
 			} else {
-				if (filename.contains(ext)) {
+				if (filename.toLowerCase().contains(ext.toLowerCase())) {
 					byte[] bytes;
 					if (filename.endsWith(".bz2")) {
 						objectContent.read();// read two bytes as a workround to
@@ -287,7 +289,11 @@ public class Util {
 					} else if (filename.endsWith(".zip")) {
 						bytes = IOUtils.toByteArray(new java.util.zip.ZipInputStream(objectContent));
 					} else {// TODO other compression we care?
-						bytes = IOUtils.toByteArray(objectContent);
+						// bytes = IOUtils.toByteArray(objectContent);
+						FileOutputStream fos = new FileOutputStream(new File("/tmp/out"));
+						IOUtils.copy(objectContent, fos);
+						FileInputStream fis = new FileInputStream("/tmp/out");
+						bytes = IOUtils.toByteArray(fis);
 					}
 					if (packingManyFilesToOneSequenceFile(writer, filename, bytes) == 0) {
 						writer.close();
@@ -309,6 +315,7 @@ public class Util {
 
 	static int packingManyFilesToOneSequenceFile(Writer sqwriter, String filename, byte[] fileinbytes)
 			throws IOException {
+		final double bufferZoneFactor = 0.95;// not to overflow HDFS block size
 		Text key = new Text(filename);
 		BytesWritable value = new BytesWritable(fileinbytes);
 		// Since HDFS Block size is normally at 64~128MB range,
@@ -316,103 +323,8 @@ public class Util {
 		// current position ~= actual sequencefile size
 		sqwriter.append(key, value);
 		int seqfilesize = (int) sqwriter.getLength();
-		return (seqfilesize < getHDFSBlockSize()) ? seqfilesize : 0;
+		return (seqfilesize < (int) (getHDFSBlockSize() * bufferZoneFactor)) ? seqfilesize : 0;
 	}
-
-	//@formatter:off
-	/*
-	public static void packS3FilesToHDFS(String s3URI, String hdfsDir, String ext, CompressionCodec codec)
-			throws IOException {
-		conf.set("fs.defaultFS", getHadoopMasterURI());
-		Path outpath;
-		if (hdfsDir.startsWith("hdfs://"))
-			outpath = new Path(hdfsDir.replaceAll("hdfs://[a-z\\.\\:0-9]+", ""));
-		else
-			outpath = new Path(hdfsDir); // TODO nn:port is required for now
-
-		List<String> argsList = new LinkedList<String>(Arrays.asList(s3URI.split("/")));
-		String bucket = argsList.get(2);
-		argsList.remove(0);
-		argsList.remove(0);
-		argsList.remove(0);// trimming leading protocol and bucket
-		String prefix = StringUtils.join(argsList, "/");
-
-		// list all objects recursively under bucket/prefix
-		ObjectListing listing = s3Client.listObjects(bucket, prefix);
-		List<S3ObjectSummary> summaries = listing.getObjectSummaries();
-		while (listing.isTruncated()) {// only if there are 1000+ objects
-			listing = s3Client.listNextBatchOfObjects(listing);
-			summaries.addAll(listing.getObjectSummaries());
-		}
-
-		int seq = 1; // packed file named as 1.seq, 2.seq,....
-		int ballsize = 0; // total size of files packed into one SequenceFile
-		int boxsize = getHDFSBlockSize();
-
-		Writer writer = getSequenceFileWriter(new Path(outpath + "/" + seq + ".seq"), codec);
-		for (S3ObjectSummary summary : summaries) {
-			String filename = summary.getKey();
-			if (!filename.contains("." + ext) && !filename.endsWith("tar.gz"))
-				continue; // skip if other meta data files under the same bucket
-			S3Object s3object = s3Client.getObject(summary.getBucketName(), summary.getKey());
-			InputStream objectContent = s3object.getObjectContent();
-
-			byte[] bytes = new byte[(int) summary.getSize()];
-			if (filename.endsWith(".bz2")) {
-				objectContent.read();
-				objectContent.read();
-				bytes = IOUtils.toByteArray(new CBZip2InputStream(objectContent));
-			} else if (filename.endsWith(".tar.gz")) {
-				GZIPInputStream gzipInputStream = new GZIPInputStream(objectContent);
-				TarArchiveInputStream tarArchiveInputStream = new TarArchiveInputStream(gzipInputStream);
-				TarArchiveEntry tarArchiveEntry;
-
-				while (null != (tarArchiveEntry = tarArchiveInputStream.getNextTarEntry())) {
-					if (!tarArchiveEntry.isDirectory()) {
-						String tarfilename = tarArchiveEntry.getName();
-						if (tarfilename.endsWith(ext)) {
-							bytes = new byte[(int) tarArchiveEntry.getSize()];
-							tarArchiveInputStream.read(bytes);
-						}//TODO: how to iterate through tar file???????
-					}
-				}
-			} else if (filename.endsWith(".gz")) {
-				bytes = IOUtils.toByteArray(new java.util.zip.GZIPInputStream(objectContent));
-			} else {
-				bytes = IOUtils.toByteArray(objectContent);
-			}// TODO: other compressors
-			objectContent.close();
-
-			Text key = new Text(summary.getBucketName() + summary.getKey());
-			BytesWritable value = new BytesWritable(bytes);
-			ballsize += bytes.length;
-			if (ballsize > boxsize) {
-				if (logger.isInfoEnabled())
-					logger.info("filename=" + filename + " summary size=" + summary.getSize() + " value length="
-							+ value.getLength());
-				writer.append(key, value);
-				writer.close();
-				++seq;
-				writer = getSequenceFileWriter(new Path(outpath + "/" + seq + ".seq"), codec);
-				ballsize = 0;
-			} else {
-				if (logger.isInfoEnabled())
-					logger.info("filename=" + filename + " summary size=" + summary.getSize() + " value length="
-							+ value.getLength());
-				writer.append(key, value);
-			}
-		}
-		writer.close();
-	}
-	
-
-	static Writer getSequenceFileWriter(Path fullpath, CompressionCodec codec) throws IOException {
-		SequenceFile.Writer writer = SequenceFile.createWriter(conf, SequenceFile.Writer.file(fullpath),
-				SequenceFile.Writer.compression(CompressionType.RECORD, codec),
-				SequenceFile.Writer.keyClass(Text.class), SequenceFile.Writer.valueClass(BytesWritable.class));
-		return writer;
-	}*/
-	// @formatter:on
 
 	public static List<String> listFiles(String dir, String ext) throws Exception {
 		List<String> uri = new ArrayList<String>();
