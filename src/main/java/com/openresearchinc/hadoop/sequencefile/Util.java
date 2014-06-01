@@ -273,7 +273,6 @@ public class Util {
 					}
 				}
 				tarArchiveInputStream.close();
-				writer.close();
 			} else {
 				if (filename.toLowerCase().contains(ext.toLowerCase())) {
 					byte[] bytes;
@@ -308,7 +307,7 @@ public class Util {
 
 	static int packingManyFilesToOneSequenceFile(Writer sqwriter, String filename, byte[] fileinbytes)
 			throws IOException {
-		final double bufferZoneFactor = 0.95;// not to overflow HDFS block size
+		final double bufferZoneFactor = 0.9;// not to overflow HDFS block size
 		Text key = new Text(filename);
 		BytesWritable value = new BytesWritable(fileinbytes);
 		// Since HDFS Block size is normally at 64~128MB range,

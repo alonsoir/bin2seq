@@ -50,8 +50,8 @@ public class SequenceFileTest extends BaseTest {
 
 	@Test
 	public void testTemp() throws Exception {
-		Util.packS3FilesToHDFS("s3://nasanex/NEX-DCP30/BCSD/rcp26/mon/atmos/pr/r1i1p1/v1.0/", "/output", "nc", new SnappyCodec());
-		Util.listSequenceFileKeys(hadoopMaster + "/output/1.seq");
+		Util.packS3FilesToHDFS("s3://nasanex/Landsat/gls/2010/1/2009/", "/output", "tif", new SnappyCodec());
+		//Util.listSequenceFileKeys(hadoopMaster + "/output/1.seq");
 	}
 
 	@Test
