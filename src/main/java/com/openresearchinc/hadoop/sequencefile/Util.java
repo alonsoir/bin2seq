@@ -175,7 +175,7 @@ public class Util {
 	 * @return
 	 */
 	public static int getHDFSBlockSize() {
-		int size = 64 * 1024 * 1024; // default Apache Hadoop HDFS block size
+		int size = 64 * 1024 * 1024; // default Apache Hadoop HDFS block size		
 		String mb = parseHadoopConf("hdfs-site.xml", "dfs.block.size");
 		if (org.apache.commons.lang3.StringUtils.containsIgnoreCase(mb, "MB")) {
 			size = Integer.parseInt(mb.replaceAll("[^\\d.]", ""));
@@ -184,7 +184,6 @@ public class Util {
 		} else {
 			logger.warn("dfs.block.size in hdfs-site.xml is not specified or not in 'MB', use default 64MB HDFS block size");
 		}
-		logger.info("HDFS block size=" + size);
 		return size;
 	}
 
@@ -222,7 +221,7 @@ public class Util {
 	 * @param s3URI
 	 * @param hdfsDir
 	 * @param ext
-	 *            case-insensitive filename extension, e.g., nc, or TIF, 
+	 *            case-insensitive filename extension, e.g., nc, or TIF,
 	 * @param codec
 	 * @throws IOException
 	 */
@@ -264,11 +263,9 @@ public class Util {
 				TarArchiveInputStream tarArchiveInputStream = new TarArchiveInputStream(gzipInputStream);
 				TarArchiveEntry tarArchiveEntry;
 				while ((tarArchiveEntry = tarArchiveInputStream.getNextTarEntry()) != null) {
-					// for each file in tar
 					if (!tarArchiveEntry.isDirectory()// not a dir and match ext
 							&& tarArchiveEntry.getName().toLowerCase().contains(ext.toLowerCase())) {
-						byte[] bytes = new byte[(int) tarArchiveEntry.getSize()];
-						tarArchiveInputStream.read(bytes);
+						byte[] bytes = IOUtils.toByteArray(tarArchiveInputStream, tarArchiveEntry.getSize());
 						if (packingManyFilesToOneSequenceFile(writer, filename, bytes) == 0) {
 							writer.close();
 							writer = createSequenceFileWriter(outpath + "/" + seq++ + ".seq", codec);
@@ -289,11 +286,7 @@ public class Util {
 					} else if (filename.endsWith(".zip")) {
 						bytes = IOUtils.toByteArray(new java.util.zip.ZipInputStream(objectContent));
 					} else {// TODO other compression we care?
-						// bytes = IOUtils.toByteArray(objectContent);
-						FileOutputStream fos = new FileOutputStream(new File("/tmp/out"));
-						IOUtils.copy(objectContent, fos);
-						FileInputStream fis = new FileInputStream("/tmp/out");
-						bytes = IOUtils.toByteArray(fis);
+						bytes = IOUtils.toByteArray(objectContent);
 					}
 					if (packingManyFilesToOneSequenceFile(writer, filename, bytes) == 0) {
 						writer.close();
