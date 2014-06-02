@@ -1,7 +1,7 @@
 
 export bootstrap="s3://ori-emrscript/bin2seq-emr-bootstrap.sh"
 #export args="-m,mapred.child.java.opts=-Xmx4096m"
-export args="--namenode-heap-size=4096,--jobtracker-heap-size=2048,--tasktracker-heap-size=4096"
+export args="-namenode-heap-size=6144,--jobtracker-heap-size=6144,--tasktracker-heap-size=6144,--namenode-opts=-XX:+UseCompressedOops,--jobtracker-opts=-XX:+UseCompressedOops,--tasktracker-opts=-XX:+UseCompressedOops"
 export clustername="test"
 export masterinstance="m3.xlarge"
 export slaveinstance="m3.xlarge"

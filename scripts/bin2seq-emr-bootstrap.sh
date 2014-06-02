@@ -115,10 +115,24 @@ sudo yum -y --enablerepo epel install hdf5
 sudo rpm -i http://dl.fedoraproject.org/pub/epel/6/x86_64/hdf5-devel-1.8.5.patch1-7.el6.x86_64.rpm
 sudo rpm -i ftp://ftp.pbone.net/mirror/archive.fedoraproject.org/fedora/linux/updates/15/x86_64/jhdf5-2.7-5.fc15.x86_64.rpm
 
+#gdal
+sudo yum -y install swig ant
+wget http://download.osgeo.org/gdal/gdal-1.9.2.tar.gz
+tar xvfz gdal-1.9.2.tar.gz
+cd gdal-1.9.2
+./configure --with-java=yes
+make 
+sudo make install
+cd swig/java
+echo "JAVA_HOME=/usr/java/latest/" > tmp; cat java.opt |egrep -v "JAVA_HOME =" >> tmp; mv tmp java.opt
+make
+cd /home/hadoop
+
 echo "" >>~/.bashrc
 echo "export LD_LIBRARY_PATH=/usr/lib64/jhdf5:$LD_LIBRARY_PATH" >> ~/.bashrc
 echo "export JAVACV_BIN_HOME=/home/hadoop/javacv-bin" >>~/.bashrc
 echo "export JAVACV_CPP_HOME=/home/hadoop/javacv-cppjars"  >>~/.bashrc
+echo "export GDAL_HOME=/home/hadoop/gdal-1.9.2"  >>~/.bashrc
 echo "export AWS_ACCESS_KEY=" >>~/.bashrc
 echo "export AWS_SECRET_KEY=" >>~/.bashrc
 
