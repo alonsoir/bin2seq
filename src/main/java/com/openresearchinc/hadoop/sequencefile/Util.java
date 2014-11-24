@@ -73,12 +73,12 @@ import com.amazonaws.services.s3.model.S3ObjectSummary;
 
 //@formatter:off
 /**
- * export LIBJARS=/path/jar1,/path/jar2 *  
- * export HADOOP_CLASSPATH=`echo ${LIBJARS} | sed s/,/:/g`
- * $hadoop jar <path>/bin2seq.jar com.openresearchinc.hadoop.sequencefile.Util -libjars $LIBJARS 
- * [-pack] -in <inuri> -out <outuri> -codec <default|gzip|bz2|snappy>"
+ * export LIBJARS=/path/jar1,/path/jar2 * export HADOOP_CLASSPATH=`echo
+ * ${LIBJARS} | sed s/,/:/g` $hadoop jar <path>/bin2seq.jar
+ * com.openresearchinc.hadoop.sequencefile.Util -libjars $LIBJARS [-pack] -in
+ * <inuri> -out <outuri> -codec <default|gzip|bz2|snappy>"
  * 
- * @author heq 
+ * @author heq
  */
 // @formatter:on
 
@@ -86,14 +86,16 @@ public class Util {
 	final static Logger logger = org.slf4j.LoggerFactory.getLogger(Util.class);
 
 	final static Configuration conf = new Configuration();
-	final static AmazonS3 s3Client = new AmazonS3Client(new BasicAWSCredentials(System.getenv("AWS_ACCESS_KEY"),
-			System.getenv("AWS_SECRET_KEY")), new ClientConfiguration());
+	final static AmazonS3 s3Client = new AmazonS3Client(
+			new BasicAWSCredentials(System.getenv("AWS_ACCESS_KEY"),
+					System.getenv("AWS_SECRET_KEY")), new ClientConfiguration());
 
 	public static void main(String[] args) throws Exception {
 		String usage = "Usage: hadoop jar ./target/bin2seq*.jar com.openresearchinc.hadoop.sequencefile.Util -pack|-list -in <input-uri> -ext <ext> -out <output-uri> -codec <gzip|bz2|snappy>";
 		String inputURI = null, outputURI = null, codec = null;
 		CompressionCodec compression = null;
-		String[] otherArgs = new GenericOptionsParser(conf, args).getRemainingArgs();
+		String[] otherArgs = new GenericOptionsParser(conf, args)
+				.getRemainingArgs();
 
 		List<String> argList = Arrays.asList(otherArgs);
 		int pos;
@@ -129,11 +131,13 @@ public class Util {
 			System.exit(0);
 		}
 
-		if (argList.indexOf("-pack") != -1 && (pos = argList.indexOf("-ext")) != -1 && inputURI != null
+		if (argList.indexOf("-pack") != -1
+				&& (pos = argList.indexOf("-ext")) != -1 && inputURI != null
 				&& outputURI != null && inputURI.startsWith("s3")) {
 			String ext = otherArgs[pos + 1];
 			logger.info("ext=" + ext);
-			packS3FilesToHDFS(inputURI, getHadoopMasterURI() + outputURI, ext, compression);
+			packS3FilesToHDFS(inputURI, getHadoopMasterURI() + outputURI, ext,
+					compression);
 			System.exit(0);
 		}
 
@@ -146,11 +150,13 @@ public class Util {
 				List<String> URIs = listFiles(path, ext);
 				for (String uri : URIs) {
 					String filename = new File(uri).getName();
-					Util.writeToSequenceFile(uri, outputURI + "/" + filename + ".seq", compression);
+					Util.writeToSequenceFile(uri, outputURI + "/" + filename
+							+ ".seq", compression);
 				}
 			} else {
 				String filename = new File(inputURI).getName();
-				Util.writeToSequenceFile(inputURI, outputURI + "/" + filename + ".seq", compression);
+				Util.writeToSequenceFile(inputURI, outputURI + "/" + filename
+						+ ".seq", compression);
 			}
 		} else {
 			System.err.println(usage);
@@ -175,9 +181,9 @@ public class Util {
 	 * @return
 	 */
 	public static int getHDFSBlockSize() {
-		int size = 64 * 1024 * 1024; // default Apache Hadoop HDFS block size		
+		int size = 64 * 1024 * 1024; // default Apache Hadoop HDFS block size
 		String mb = parseHadoopConf("hdfs-site.xml", "dfs.block.size");
-		if (org.apache.commons.lang3.StringUtils.containsIgnoreCase(mb, "MB")) {
+		if (mb.toUpperCase().contains("MB")) {
 			size = Integer.parseInt(mb.replaceAll("[^\\d.]", ""));
 		} else if (mb.matches("\\d+")) {
 			size = Integer.parseInt(mb);
@@ -196,18 +202,22 @@ public class Util {
 	 * @return
 	 */
 	static String parseHadoopConf(String hadoopconf, String key) {
-		File hadoopHomeDir = new File(System.getenv("HADOOP_HOME") + "/etc/hadoop");
+		File hadoopHomeDir = new File(System.getenv("HADOOP_HOME")
+				+ "/etc/hadoop");
 		try {
 			XPathFactory xpf = XPathFactory.newInstance();
 			XPath xpath = xpf.newXPath();
-			XPathExpression xpe = xpath.compile("//property[name/text()='" + key + "']/value");
-			InputSource coresitexml = new InputSource(new FileReader(hadoopHomeDir + "/" + hadoopconf));
+			XPathExpression xpe = xpath.compile("//property[name/text()='"
+					+ key + "']/value");
+			InputSource coresitexml = new InputSource(new FileReader(
+					hadoopHomeDir + "/" + hadoopconf));
 			return xpe.evaluate(coresitexml);
 		} catch (IOException ioe) {
 			logger.error("Cannot find " + hadoopconf + " under $HADOOP_HOME");
 			System.exit(1);
 		} catch (XPathExpressionException e) {
-			logger.error("Error when parsing" + hadoopconf + " under $HADOOP_HOME");
+			logger.error("Error when parsing" + hadoopconf
+					+ " under $HADOOP_HOME");
 			System.exit(1);
 		}
 		return null;
@@ -225,8 +235,8 @@ public class Util {
 	 * @param codec
 	 * @throws IOException
 	 */
-	public static void packS3FilesToHDFS(String s3URI, String hdfsDir, String ext, CompressionCodec codec)
-			throws IOException {
+	public static void packS3FilesToHDFS(String s3URI, String hdfsDir,
+			String ext, CompressionCodec codec) throws IOException {
 		conf.set("fs.defaultFS", getHadoopMasterURI());
 		Path outpath;
 		if (hdfsDir.startsWith("hdfs://"))
@@ -234,7 +244,8 @@ public class Util {
 		else
 			outpath = new Path(hdfsDir); // TODO nn:port is required for now
 
-		List<String> argsList = new LinkedList<String>(Arrays.asList(s3URI.split("/")));
+		List<String> argsList = new LinkedList<String>(Arrays.asList(s3URI
+				.split("/")));
 		String bucket = argsList.get(2);
 		argsList.remove(0);
 		argsList.remove(0);
@@ -249,26 +260,36 @@ public class Util {
 		}
 
 		int seq = 1;
-		SequenceFile.Writer writer = createSequenceFileWriter(outpath + "/" + seq + ".seq", codec);
+		SequenceFile.Writer writer = createSequenceFileWriter(outpath + "/"
+				+ seq + ".seq", codec);
 		for (S3ObjectSummary summary : summaries) {
 			String filename = summary.getKey();
 			logger.info("filename=" + filename);
-			S3Object s3object = s3Client.getObject(summary.getBucketName(), summary.getKey());
+			S3Object s3object = s3Client.getObject(summary.getBucketName(),
+					summary.getKey());
 			InputStream objectContent = s3object.getObjectContent();
 
 			// remove leading . of extension if any and adding .
 			ext = "." + (ext.startsWith(".") ? ext.substring(1) : ext);
 			if (filename.endsWith(".tar.gz")) {
-				GZIPInputStream gzipInputStream = new GZIPInputStream(objectContent);
-				TarArchiveInputStream tarArchiveInputStream = new TarArchiveInputStream(gzipInputStream);
+				GZIPInputStream gzipInputStream = new GZIPInputStream(
+						objectContent);
+				TarArchiveInputStream tarArchiveInputStream = new TarArchiveInputStream(
+						gzipInputStream);
 				TarArchiveEntry tarArchiveEntry;
-				while ((tarArchiveEntry = tarArchiveInputStream.getNextTarEntry()) != null) {
+				while ((tarArchiveEntry = tarArchiveInputStream
+						.getNextTarEntry()) != null) {
 					if (!tarArchiveEntry.isDirectory()// not a dir and match ext
-							&& tarArchiveEntry.getName().toLowerCase().contains(ext.toLowerCase())) {
-						byte[] bytes = IOUtils.toByteArray(tarArchiveInputStream, tarArchiveEntry.getSize());
-						if (packingManyFilesToOneSequenceFile(writer, filename, bytes) == 0) {
+							&& tarArchiveEntry.getName().toLowerCase()
+									.contains(ext.toLowerCase())) {
+						byte[] bytes = IOUtils.toByteArray(
+								tarArchiveInputStream,
+								tarArchiveEntry.getSize());
+						if (packingManyFilesToOneSequenceFile(writer, filename,
+								bytes) == 0) {
 							writer.close();
-							writer = createSequenceFileWriter(outpath + "/" + seq++ + ".seq", codec);
+							writer = createSequenceFileWriter(outpath + "/"
+									+ seq++ + ".seq", codec);
 						}
 					}
 				}
@@ -279,17 +300,24 @@ public class Util {
 					if (filename.endsWith(".bz2")) {
 						objectContent.read();// read two bytes as a workround to
 						objectContent.read();// to deal with bzip2 size issue
-						bytes = IOUtils.toByteArray(new CBZip2InputStream(objectContent));
+						bytes = IOUtils.toByteArray(new CBZip2InputStream(
+								objectContent));
 					} else if (filename.endsWith(".gz")) {
-						bytes = IOUtils.toByteArray(new java.util.zip.GZIPInputStream(objectContent));
+						bytes = IOUtils
+								.toByteArray(new java.util.zip.GZIPInputStream(
+										objectContent));
 					} else if (filename.endsWith(".zip")) {
-						bytes = IOUtils.toByteArray(new java.util.zip.ZipInputStream(objectContent));
+						bytes = IOUtils
+								.toByteArray(new java.util.zip.ZipInputStream(
+										objectContent));
 					} else {// TODO other compression we care?
 						bytes = IOUtils.toByteArray(objectContent);
 					}
-					if (packingManyFilesToOneSequenceFile(writer, filename, bytes) == 0) {
+					if (packingManyFilesToOneSequenceFile(writer, filename,
+							bytes) == 0) {
 						writer.close();
-						writer = createSequenceFileWriter(outpath + "/" + seq++ + ".seq", codec);
+						writer = createSequenceFileWriter(outpath + "/" + seq++
+								+ ".seq", codec);
 					}
 				}
 			}
@@ -298,15 +326,18 @@ public class Util {
 		writer.close();
 	}
 
-	static Writer createSequenceFileWriter(String absolutepath, CompressionCodec codec) throws IOException {
-		SequenceFile.Writer writer = SequenceFile.createWriter(conf, SequenceFile.Writer.file(new Path(absolutepath)),
+	static Writer createSequenceFileWriter(String absolutepath,
+			CompressionCodec codec) throws IOException {
+		SequenceFile.Writer writer = SequenceFile.createWriter(conf,
+				SequenceFile.Writer.file(new Path(absolutepath)),
 				SequenceFile.Writer.compression(CompressionType.RECORD, codec),
-				SequenceFile.Writer.keyClass(Text.class), SequenceFile.Writer.valueClass(BytesWritable.class));
+				SequenceFile.Writer.keyClass(Text.class),
+				SequenceFile.Writer.valueClass(BytesWritable.class));
 		return writer;
 	}
 
-	static int packingManyFilesToOneSequenceFile(Writer sqwriter, String filename, byte[] fileinbytes)
-			throws IOException {
+	static int packingManyFilesToOneSequenceFile(Writer sqwriter,
+			String filename, byte[] fileinbytes) throws IOException {
 		final double bufferZoneFactor = 0.9;// not to overflow HDFS block size
 		Text key = new Text(filename);
 		BytesWritable value = new BytesWritable(fileinbytes);
@@ -315,10 +346,12 @@ public class Util {
 		// current position ~= actual sequencefile size
 		sqwriter.append(key, value);
 		int seqfilesize = (int) sqwriter.getLength();
-		return (seqfilesize < (int) (getHDFSBlockSize() * bufferZoneFactor)) ? seqfilesize : 0;
+		return (seqfilesize < (int) (getHDFSBlockSize() * bufferZoneFactor)) ? seqfilesize
+				: 0;
 	}
 
-	public static List<String> listFiles(String dir, String ext) throws Exception {
+	public static List<String> listFiles(String dir, String ext)
+			throws Exception {
 		List<String> uri = new ArrayList<String>();
 
 		if (dir.startsWith("s3://") || dir.startsWith("s3n://")) {
@@ -330,17 +363,20 @@ public class Util {
 			argsList.remove(0);// trimming leading protocol and bucket
 			String prefix = StringUtils.join(argsList, "/");
 
-			ListObjectsRequest listObjectsRequest = new ListObjectsRequest().withBucketName(bucket).withPrefix(prefix);
+			ListObjectsRequest listObjectsRequest = new ListObjectsRequest()
+					.withBucketName(bucket).withPrefix(prefix);
 			ObjectListing objectListing;
 
 			do {
 				objectListing = s3Client.listObjects(listObjectsRequest);
-				for (S3ObjectSummary objectSummary : objectListing.getObjectSummaries()) {
+				for (S3ObjectSummary objectSummary : objectListing
+						.getObjectSummaries()) {
 					if (!objectSummary.getKey().endsWith(ext))
 						continue;
 					uri.add("s3n://" + bucket + "/" + objectSummary.getKey());
 					if (logger.isInfoEnabled())
-						logger.info(" - " + objectSummary.getKey() + "  " + "(size = " + objectSummary.getSize() + ")");
+						logger.info(" - " + objectSummary.getKey() + "  "
+								+ "(size = " + objectSummary.getSize() + ")");
 				}
 				listObjectsRequest.setMarker(objectListing.getNextMarker());
 			} while (objectListing.isTruncated());
@@ -357,8 +393,9 @@ public class Util {
 		return uri;
 	}
 
-	public static void writeToSequenceFile(String inputURI, String outputURI, CompressionCodec codec)
-			throws IOException, NoSuchAlgorithmException {
+	public static void writeToSequenceFile(String inputURI, String outputURI,
+			CompressionCodec codec) throws IOException,
+			NoSuchAlgorithmException {
 		Path outpath = null;
 		String inputFile = null;
 		byte[] bytes = null;
@@ -380,7 +417,8 @@ public class Util {
 			}
 			key = new Text(dataFile.getAbsolutePath());
 			value = new BytesWritable(uncompressed);
-		} else if (inputURI.startsWith("s3://") || inputURI.startsWith("s3n://")) {
+		} else if (inputURI.startsWith("s3://")
+				|| inputURI.startsWith("s3n://")) {
 			String[] args = inputURI.split("/");
 			String bucket = args[2].split("\\.")[0];
 			List<String> argsList = new LinkedList<String>(Arrays.asList(args));
@@ -406,7 +444,8 @@ public class Util {
 			String[] args = inputURI.split("/");
 			String host = args[2];
 			String uri = inputURI.replaceAll("http://[a-zA-Z0-9-.]+", "");
-			InputStream in = new BufferedInputStream(new URL("http", host, uri).openStream());
+			InputStream in = new BufferedInputStream(
+					new URL("http", host, uri).openStream());
 			key = new Text(inputURI);
 			bytes = org.apache.commons.io.IOUtils.toByteArray(in);
 			value = new BytesWritable(bytes);
@@ -421,10 +460,12 @@ public class Util {
 			if (!conf.get("fs.defaultFS").contains("hdfs://")) {
 				conf.set("fs.defaultFS", "hdfs://" + outputURI.split("/")[2]);
 			}// only useful in eclipse, no need if running hadoop jar
-			outpath = new Path(outputURI.replaceAll("hdfs://[a-z\\.\\:0-9]+", ""));
+			outpath = new Path(outputURI.replaceAll("hdfs://[a-z\\.\\:0-9]+",
+					""));
 		} else if (outputURI.startsWith("s3n://")) {
 			conf.set("fs.s3n.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY"));
-			conf.set("fs.s3n.awsSecretAccessKey", System.getenv("AWS_SECRET_KEY"));
+			conf.set("fs.s3n.awsSecretAccessKey",
+					System.getenv("AWS_SECRET_KEY"));
 			outpath = new Path(outputURI);
 		} else if (outputURI.startsWith("file://")) {
 			outpath = new Path(outputURI.replaceAll("file://", ""));
@@ -433,23 +474,28 @@ public class Util {
 			System.exit(2); // TODO
 		}
 
-		SequenceFile.Writer writer = SequenceFile.createWriter(conf, SequenceFile.Writer.file(outpath),
+		SequenceFile.Writer writer = SequenceFile.createWriter(conf,
+				SequenceFile.Writer.file(outpath),
 				SequenceFile.Writer.compression(CompressionType.RECORD, codec),
-				SequenceFile.Writer.keyClass(Text.class), SequenceFile.Writer.valueClass(BytesWritable.class));
+				SequenceFile.Writer.keyClass(Text.class),
+				SequenceFile.Writer.valueClass(BytesWritable.class));
 		writer.append(key, value);
 		org.apache.hadoop.io.IOUtils.closeStream(writer);
 	}
 
-	public static void listSequenceFileKeys(String sequenceFileURI) throws Exception {
+	public static void listSequenceFileKeys(String sequenceFileURI)
+			throws Exception {
 		Path path = null;
 		if (sequenceFileURI.startsWith("hdfs://")) {
 			if (!conf.get("fs.defaultFS").contains("hdfs://")) {
 				conf.set("fs.defaultFS", getHadoopMasterURI());
 			}// only useful in eclipse, no need if running hadoop jar
-			path = new Path(sequenceFileURI.replaceAll("hdfs://[a-z\\.\\:0-9]+", ""));
+			path = new Path(sequenceFileURI.replaceAll(
+					"hdfs://[a-z\\.\\:0-9]+", ""));
 		} else if (sequenceFileURI.startsWith("s3n://")) {
 			conf.set("fs.s3n.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY"));
-			conf.set("fs.s3n.awsSecretAccessKey", System.getenv("AWS_SECRET_KEY"));
+			conf.set("fs.s3n.awsSecretAccessKey",
+					System.getenv("AWS_SECRET_KEY"));
 			path = new Path(sequenceFileURI); // NEXT SPIKE
 		} else if (sequenceFileURI.startsWith("file://")) {
 			path = new Path(sequenceFileURI.replaceAll("file://", ""));
@@ -458,18 +504,22 @@ public class Util {
 			System.exit(2); // TODO
 		}
 
-		SequenceFile.Reader reader = new SequenceFile.Reader(conf, SequenceFile.Reader.file(path));
-		Text key = (Text) ReflectionUtils.newInstance(reader.getKeyClass(), conf);
+		SequenceFile.Reader reader = new SequenceFile.Reader(conf,
+				SequenceFile.Reader.file(path));
+		Text key = (Text) ReflectionUtils.newInstance(reader.getKeyClass(),
+				conf);
 		while (reader.next(key)) {
 			logger.info("key : " + key.toString());
 		}
 		org.apache.hadoop.io.IOUtils.closeStream(reader);
 	}
 
-	public static byte[] readSequenceFileFromS3(String s3URI) throws IOException {
+	public static byte[] readSequenceFileFromS3(String s3URI)
+			throws IOException {
 		String accessKey = System.getenv("AWS_ACCESS_KEY");
 		String secretKey = System.getenv("AWS_SECRET_KEY");
-		if (accessKey == null || accessKey.isEmpty() || secretKey == null || secretKey.isEmpty()) {
+		if (accessKey == null || accessKey.isEmpty() || secretKey == null
+				|| secretKey.isEmpty()) {
 			logger.error("$AWS_ACCESS_KEY or $AWS_SECRET_KEY is not set");
 			System.exit(1);
 		}
@@ -484,7 +534,8 @@ public class Util {
 		return read(new Path(s3URI));
 	}
 
-	public static byte[] readSequenceFileFromHDFS(String hdfsURI) throws IOException {
+	public static byte[] readSequenceFileFromHDFS(String hdfsURI)
+			throws IOException {
 		Pattern pattern = Pattern.compile("^hdfs://\\S+:\\d+/\\S+");
 		Matcher m = pattern.matcher(hdfsURI);
 		if (!m.find()) {
@@ -494,7 +545,8 @@ public class Util {
 		return read(new Path(hdfsURI));
 	}
 
-	public static byte[] readSequenceFileFromFS(String fileURI) throws IOException {
+	public static byte[] readSequenceFileFromFS(String fileURI)
+			throws IOException {
 		Pattern pattern = Pattern.compile("^file://\\S+/\\S+");
 		Matcher m = pattern.matcher(fileURI);
 		if (!m.find()) {
@@ -505,12 +557,16 @@ public class Util {
 
 	private static byte[] read(Path path) throws IOException {
 		// Map<Text, byte[]> map = new HashMap<Text, byte[]>();
-		SequenceFile.Reader reader = new SequenceFile.Reader(conf, SequenceFile.Reader.file(path));
-		Text key = (Text) ReflectionUtils.newInstance(reader.getKeyClass(), conf);
-		BytesWritable value = (BytesWritable) ReflectionUtils.newInstance(reader.getValueClass(), conf);
+		SequenceFile.Reader reader = new SequenceFile.Reader(conf,
+				SequenceFile.Reader.file(path));
+		Text key = (Text) ReflectionUtils.newInstance(reader.getKeyClass(),
+				conf);
+		BytesWritable value = (BytesWritable) ReflectionUtils.newInstance(
+				reader.getValueClass(), conf);
 		while (reader.next(key, value)) {
 			if (logger.isInfoEnabled())
-				logger.info("key : " + key.toString() + " - value size: " + value.getBytes().length);
+				logger.info("key : " + key.toString() + " - value size: "
+						+ value.getBytes().length);
 			return value.getBytes();
 		}
 		org.apache.hadoop.io.IOUtils.closeStream(reader);
@@ -518,17 +574,22 @@ public class Util {
 	}
 
 	// @Deprecated
-	public static Map<Text, byte[]> readSequenceFile(String sequenceFileURI) throws IOException {
+	public static Map<Text, byte[]> readSequenceFile(String sequenceFileURI)
+			throws IOException {
 		Map<Text, byte[]> map = new HashMap<Text, byte[]>();
 		Path path = null;
 		if (sequenceFileURI.startsWith("hdfs://")) {
 			if (!conf.get("fs.defaultFS").contains("hdfs://")) {
-				conf.set("fs.defaultFS", "hdfs://" + sequenceFileURI.split("/")[2]);
+				conf.set("fs.defaultFS", "hdfs://"
+						+ sequenceFileURI.split("/")[2]);
 			}// only useful in eclipse, no need if running hadoop jar
-			path = new Path(sequenceFileURI.replaceAll("hdfs://[a-z\\.\\:0-9]+", ""));
-		} else if (sequenceFileURI.startsWith("s3n://") || sequenceFileURI.startsWith("s3://")) {
+			path = new Path(sequenceFileURI.replaceAll(
+					"hdfs://[a-z\\.\\:0-9]+", ""));
+		} else if (sequenceFileURI.startsWith("s3n://")
+				|| sequenceFileURI.startsWith("s3://")) {
 			conf.set("fs.s3n.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY"));
-			conf.set("fs.s3n.awsSecretAccessKey", System.getenv("AWS_SECRET_KEY"));
+			conf.set("fs.s3n.awsSecretAccessKey",
+					System.getenv("AWS_SECRET_KEY"));
 			path = new Path(sequenceFileURI);
 		} else if (sequenceFileURI.startsWith("file://")) {
 			path = new Path(sequenceFileURI.replaceAll("file://", ""));
@@ -537,12 +598,16 @@ public class Util {
 			System.exit(2); // TODO
 		}
 
-		SequenceFile.Reader reader = new SequenceFile.Reader(conf, SequenceFile.Reader.file(path));
-		Text key = (Text) ReflectionUtils.newInstance(reader.getKeyClass(), conf);
-		BytesWritable value = (BytesWritable) ReflectionUtils.newInstance(reader.getValueClass(), conf);
+		SequenceFile.Reader reader = new SequenceFile.Reader(conf,
+				SequenceFile.Reader.file(path));
+		Text key = (Text) ReflectionUtils.newInstance(reader.getKeyClass(),
+				conf);
+		BytesWritable value = (BytesWritable) ReflectionUtils.newInstance(
+				reader.getValueClass(), conf);
 		while (reader.next(key, value)) {
 			if (logger.isDebugEnabled())
-				logger.debug("key : " + key.toString() + " - value size: " + value.getBytes().length);
+				logger.debug("key : " + key.toString() + " - value size: "
+						+ value.getBytes().length);
 			map.put(key, value.getBytes());
 		}
 		org.apache.hadoop.io.IOUtils.closeStream(reader);
@@ -561,7 +626,8 @@ public class Util {
 	 * 
 	 * @throws IOException
 	 */
-	public static void copySequenceFile(String from, String to, String remoteHadoopFS) throws IOException {
+	public static void copySequenceFile(String from, String to,
+			String remoteHadoopFS) throws IOException {
 		conf.set("fs.defaultFS", remoteHadoopFS);
 		FileSystem fs = FileSystem.get(conf);
 
