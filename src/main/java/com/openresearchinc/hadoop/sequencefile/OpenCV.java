@@ -85,6 +85,7 @@ public class OpenCV extends Configured implements Tool {
 		job.setInputFormatClass(SequenceFileInputFormat.class);
 		job.setOutputFormatClass(TextOutputFormat.class);
 
+		FileInputFormat.setInputDirRecursive(job, true); //add data recursively
 		FileInputFormat.addInputPath(job, new Path(args[0]));
 		FileOutputFormat.setOutputPath(job, new Path(args[1]));
 
