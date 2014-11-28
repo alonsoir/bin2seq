@@ -66,6 +66,7 @@ public class NetCDF extends Configured implements Tool {
 		job.setInputFormatClass(SequenceFileInputFormat.class);
 		job.setOutputFormatClass(TextOutputFormat.class);
 
+		FileInputFormat.setInputDirRecursive(job, true); //add data recursively
 		FileInputFormat.addInputPath(job, new Path(args[0]));
 		FileOutputFormat.setOutputPath(job, new Path(args[1]));
 
@@ -114,13 +115,13 @@ public class NetCDF extends Configured implements Tool {
 			logger.error("Cannot find Variable latitude(lat)");
 			System.exit(1);
 		}
-		ArrayFloat.D1 absolutelat = (ArrayFloat.D1) lat.read();
+		ArrayDouble.D1 absolutelat = (ArrayDouble.D1) lat.read();
 		Variable lon = nc.findVariable("lon");
 		if (lon == null) {
 			logger.error("Cannot find Variable longitude(lon)");
 			System.exit(1);
 		}
-		ArrayFloat.D1 absolutelon = (ArrayFloat.D1) lon.read();
+		ArrayDouble.D1 absolutelon = (ArrayDouble.D1) lon.read();
 		Variable pres = nc.findVariable("pr");
 		if (pres == null) {
 			logger.error("Cannot find Variable precipitation(pr)");
@@ -149,9 +150,8 @@ public class NetCDF extends Configured implements Tool {
 			}
 		}
 
-		if (logger.isDebugEnabled())
-			logger.debug(hostname + "," + days + "," + absolutelat.get(orig_lat) + "," + absolutelon.get(orig_lon)
-					+ "," + SIZE + ":" + min + "," + max + "," + sum / (SIZE * SIZE));
+		logger.debug(hostname + "," + days + "," + absolutelat.get(orig_lat) + "," + absolutelon.get(orig_lon) + ","
+				+ SIZE + ":" + min + "," + max + "," + sum / (SIZE * SIZE));
 
 		return days + "," + absolutelat.get(orig_lat) + "," + absolutelon.get(orig_lon) + "," + SIZE + ":" + min + ","
 				+ max + "," + (double) sum / (SIZE * SIZE);
