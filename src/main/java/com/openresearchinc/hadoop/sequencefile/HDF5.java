@@ -81,8 +81,10 @@ public class HDF5 extends Configured implements Tool {
 		job.setInputFormatClass(SequenceFileInputFormat.class);
 		job.setOutputFormatClass(TextOutputFormat.class);
 
-		FileInputFormat.addInputPath(job, new Path(args[0]));
+		FileInputFormat.setInputDirRecursive(job, true); //add data recursively  
+		FileInputFormat.addInputPath(job, new Path(args[0]));				
 		FileOutputFormat.setOutputPath(job, new Path(args[1]));
+		logger.debug("output path={}", args[1]);
 
 		job.waitForCompletion(true);
 		return 0;
@@ -91,8 +93,8 @@ public class HDF5 extends Configured implements Tool {
 	public static class Map extends Mapper<Text, BytesWritable, Text, Text> {
 
 		protected void setup(Context context) throws IOException {
-			// log where mapper is executed
 			hostname = InetAddress.getLocalHost().getHostName();
+			logger.debug("host={}", hostname);
 		}
 
 		public void map(Text key, BytesWritable value, Context context) throws IOException, InterruptedException {
@@ -105,7 +107,7 @@ public class HDF5 extends Configured implements Tool {
 			List<String> attributes = new ArrayList<String>();
 
 			if (!filename.toLowerCase().matches(".*h5.*")) {
-				logger.error("unsupported HDF5 formats for input: " + filename);
+				logger.error("unsupported HDF5 formats for input: {}", filename);
 				System.exit(1);
 			}
 
