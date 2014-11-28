@@ -24,9 +24,10 @@ import org.apache.hadoop.io.compress.DefaultCodec;
 import org.apache.hadoop.io.compress.GzipCodec;
 import org.apache.hadoop.io.compress.Lz4Codec;
 import org.apache.hadoop.io.compress.SnappyCodec;
-import org.apache.log4j.Logger;
 import org.gdal.gdal.Dataset;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import ucar.ma2.Array;
 import ucar.ma2.ArrayDouble;
@@ -46,7 +47,7 @@ import com.openresearchinc.hadoop.sequencefile.hdf5_getters;
  * 
  */
 public class SequenceFileTest extends BaseTest {
-	final static Logger logger = Logger.getLogger(SequenceFileTest.class);
+	final static Logger logger = LoggerFactory.getLogger(SequenceFileTest.class);
 
 	@Test
 	public void testTemp() throws Exception {
@@ -77,6 +78,7 @@ public class SequenceFileTest extends BaseTest {
 		String outputURI = hadoopMaster + "/tmp/" + file + ".seq";
 		Util.writeToSequenceFile(inputURI, outputURI, new SnappyCodec());
 		byte[] ppmbytes = Util.readSequenceFileFromHDFS(outputURI);
+		logger.debug("file size= {}", ppmbytes.length);
 		ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(ppmbytes));
 		BufferedImage rawimage = PPMImageReader.read(iis);
 		List<int[]> faces = OpenCV.detectFace(rawimage);
@@ -190,13 +192,14 @@ public class SequenceFileTest extends BaseTest {
 	/**
 	 * TODO: python API: http://stackoverflow.com/questions/16654251/can-h5py-load-a-file-from-a-byte-array-in-memory
 	 * @throws Exception
-	 */	
+	 */
 	public void testNASAModisHDFAccess() throws Exception {
 		File file = new File(this.getClass().getResource("/MYD13Q1.A2014121.h23v04.005.2014138045119.hdf").getPath());
 		byte[] netcdfinbyte = FileUtils.readFileToByteArray(file);
 		NetcdfFile netCDFfile = NetcdfFile.openInMemory("inmemory.hdf", netcdfinbyte);
 		//TODO Processing hdf files
 	}
+
 	@Test
 	/**
 	 * TODO: python API: http://stackoverflow.com/questions/16654251/can-h5py-load-a-file-from-a-byte-array-in-memory
