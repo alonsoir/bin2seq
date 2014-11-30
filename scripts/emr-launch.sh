@@ -10,7 +10,10 @@ export slaves="1"
 export bidprice=`aws ec2 describe-spot-price-history --instance-types m3.xlarge --product-descriptions Linux/UNIX |grep SpotPrice |sort |head -n 1 |cut -d':' -f2 | sed -e 's/"//g' -e 's/,//g' |awk '{print $1 + 0.01}'  |cut -c1-4` #lowest bid + $0.01
 echo "biding price="$bidprice
 
-aws emr create-cluster --enable-debugging --log-uri s3://ori-tmp/emr-log  --ec2-attributes KeyName=gsg-keypair --ami-version $amiversion --bootstrap-actions Path=$bootstrap,Name="Set heap size",Args=[$args] --instance-groups InstanceGroupType=MASTER,InstanceCount=1,BidPrice=$bidprice,Name=Master,InstanceType=$masterinstance InstanceGroupType=CORE,BidPrice=$bidprice,Name=Slave,InstanceCount=$slaves,InstanceType=$slaveinstance 
+aws emr create-cluster --enable-debugging --log-uri s3://ori-tmp/emr-log  --ec2-attributes KeyName=gsg-keypair --ami-version $amiversion \
+--bootstrap-actions Path=s3://elasticmapreduce/bootstrap-actions/configure-daemons,Name="Set VM parameters",Args=[$args] \
+Path=$bootstrap,Name="Install dependencies" \
+--instance-groups InstanceGroupType=MASTER,InstanceCount=1,BidPrice=$bidprice,Name=Master,InstanceType=$masterinstance InstanceGroupType=CORE,BidPrice=$bidprice,Name=Slave,InstanceCount=$slaves,InstanceType=$slaveinstance 
 
 #export jobid=`elastic-mapreduce --list --active |awk '{print $1}'`
 #elastic-mapreduce --jobflow $jobid --jar /home/hadoop/lib/emr-s3distcp-1.0.jar --args '--src,s3://ori-msd10k-seq/,--dest,hdfs:///msd10k'
