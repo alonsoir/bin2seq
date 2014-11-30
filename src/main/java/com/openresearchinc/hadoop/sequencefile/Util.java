@@ -235,12 +235,9 @@ public class Util {
 		Path outpath = new Path(masterURL + hdfsDir.replaceAll("^hdfs:/{2,}", "/"));
 		logger.debug("HDFS Output dir={}", hdfsDir);
 
-		String[] trimmedInput = s3URI.replaceAll("^s3[n]?:/{2,}", "/").split("/");
-		List<String> argsList = new LinkedList<String>(Arrays.asList(trimmedInput));
-		String bucket = trimmedInput[1];
-		argsList.remove(0);
-		argsList.remove(0);// trimming off bucket		
-		String prefix = StringUtils.join(argsList, "/");
+		String trimmedS3URI = s3URI.replaceAll("^s3[n]?:/{2,}", ""); //trim protocol part
+		String bucket = StringUtils.substringBefore(trimmedS3URI, "/"); //the first as bucket
+		String prefix = StringUtils.substringAfter(trimmedS3URI, "/"); //the rest are prefix
 
 		ObjectListing listing = s3Client.listObjects(bucket, prefix);
 		// list all objects recursively under bucket/prefix
@@ -253,7 +250,7 @@ public class Util {
 
 		for (S3ObjectSummary summary : summaries) {
 			String filename = summary.getKey();
-			logger.debug("filename= {}", filename);
+			logger.debug("file URI= {}", filename);
 
 			S3Object s3object = s3Client.getObject(summary.getBucketName(), summary.getKey());
 			InputStream objectContent = s3object.getObjectContent();
@@ -268,9 +265,14 @@ public class Util {
 					if (!tarArchiveEntry.isDirectory()// not a dir and match ext
 							&& tarArchiveEntry.getName().toLowerCase().contains(ext.toLowerCase())) {
 						byte[] bytes = IOUtils.toByteArray(tarArchiveInputStream, tarArchiveEntry.getSize());
-						Text key = new Text(filename);
+						logger.debug("tar filename={}", tarArchiveEntry.getName());
+						String filenameInTar = StringUtils.substringBeforeLast(filename, "/")
+								+ tarArchiveEntry.getName().replaceAll("^\\.", "");
+						Text key = new Text(filenameInTar);
 						BytesWritable value = new BytesWritable(bytes);
-						SequenceFile.Writer writer = createSequenceFileWriter(outpath + "/" + filename + ".seq", codec);
+						logger.debug("hdfs path={}", outpath + "/" + filenameInTar + ".seq");
+						SequenceFile.Writer writer = createSequenceFileWriter(outpath + "/" + filenameInTar + ".seq",
+								codec);
 						writer.append(key, value);
 						writer.close();
 					}
@@ -295,6 +297,7 @@ public class Util {
 					}
 					Text key = new Text(filename);
 					BytesWritable value = new BytesWritable(bytes);
+					logger.debug("hdfs path={}", outpath + "/" + filename + ".seq");
 					SequenceFile.Writer writer = createSequenceFileWriter(outpath + "/" + filename + ".seq", codec);
 					writer.append(key, value);
 					writer.close();
