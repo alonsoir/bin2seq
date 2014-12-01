@@ -89,7 +89,7 @@ public class Util {
 			System.getenv("AWS_SECRET_KEY")), new ClientConfiguration());
 
 	public static void main(String[] args) throws Exception {
-		String usage = "Usage: hadoop jar ./target/bin2seq*.jar com.openresearchinc.hadoop.sequencefile.Util -pack|-list -in <input-uri> -ext <ext> -out <output-uri> -codec <gzip|bz2|snappy>";
+		String usage = "Usage: hadoop jar ./target/bin2seq*.jar com.openresearchinc.hadoop.sequencefile.Util -list -in <input-uri> -ext <ext> -out <output-uri> -codec <none|default|gzip|bz2|snappy>";
 		String inputURI = null, outputURI = null, codec = null;
 		CompressionCodec compression = null;
 		String[] otherArgs = new GenericOptionsParser(conf, args).getRemainingArgs();
@@ -105,6 +105,9 @@ public class Util {
 		if ((pos = argList.indexOf("-codec")) != -1) {
 			codec = otherArgs[pos + 1];
 			switch (codec.toLowerCase()) {
+			case "none":
+				compression = null;
+				break;
 			case "gzip":
 				compression = new GzipCodec();
 				break;
@@ -127,16 +130,9 @@ public class Util {
 			listSequenceFileKeys(inputURI);
 			System.exit(0);
 		}
-		/*
-		 * if (argList.indexOf("-pack") != -1 && (pos = argList.indexOf("-ext")) != -1 && inputURI != null && outputURI
-		 * != null && inputURI.startsWith("s3")) { String ext = otherArgs[pos + 1]; logger.info("ext=" + ext);
-		 * packS3FilesToHDFS(inputURI, getHadoopMasterURI() + outputURI, ext, compression); System.exit(0); }
-		 */
 		if (inputURI.startsWith("s3://") && outputURI.startsWith("hdfs://") && (pos = argList.indexOf("-ext")) != -1) {
 			String ext = otherArgs[pos + 1];
-			logger.info("ext=" + ext);
-			//copyS3FilesToHDFS(inputURI, getHadoopMasterURI() + outputURI.replaceAll("^hdfs:/{2,}", "/"), ext,
-			//		compression);
+			logger.info("input ={},outputURI={}, ext={}", inputURI, outputURI, ext);
 			copyS3FilesToHDFS(inputURI, outputURI, ext, compression);
 			System.exit(0);
 		}
@@ -394,9 +390,16 @@ public class Util {
 	}
 
 	static Writer createSequenceFileWriter(String absolutepath, CompressionCodec codec) throws IOException {
+		CompressionType compressionType;
+		if (codec == null) {
+			compressionType = CompressionType.NONE;
+		} else {
+			compressionType = CompressionType.RECORD;
+		}
+
 		SequenceFile.Writer writer = SequenceFile.createWriter(conf, SequenceFile.Writer.file(new Path(absolutepath)),
-				SequenceFile.Writer.compression(CompressionType.RECORD, codec),
-				SequenceFile.Writer.keyClass(Text.class), SequenceFile.Writer.valueClass(BytesWritable.class));
+				SequenceFile.Writer.compression(compressionType, codec), SequenceFile.Writer.keyClass(Text.class),
+				SequenceFile.Writer.valueClass(BytesWritable.class));
 		return writer;
 	}
 
