@@ -80,9 +80,14 @@
 
 	<dependencies>
 		<dependency>
-			<groupId>ratel</groupId>
-			<artifactId>gdal</artifactId>
-			<version>1.9.1</version>
+			<groupId>org.clojars.sritchie09</groupId>
+			<artifactId>gdal-java</artifactId>
+			<version>1.8.0</version>
+		</dependency>
+		<dependency>
+			<groupId>org.clojars.sritchie09</groupId>
+			<artifactId>gdal-java-native</artifactId>
+			<version>1.8.0</version> <!-- the latest version 1.9.1 does not have native lib yet, so use 1.8 instead -->
 		</dependency>
 		<dependency>
 			<groupId>org.bytedeco</groupId>
