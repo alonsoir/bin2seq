@@ -6,6 +6,11 @@ echo "export LD_LIBRARY_PATH=/usr/lib64/jhdf5:$LD_LIBRARY_PATH" >> ~/.bashrc
 echo "export AWS_ACCESS_KEY=" >>~/.bashrc
 echo "export AWS_SECRET_KEY=" >>~/.bashrc
 
+#install OpenCV dependency gtk2
+sudo wget --no-check-certificate https://raw.githubusercontent.com/dayne/yum/master/centos6/CentOS-Base.repo -O /etc/yum.repos.d/CentOS-Base.repo
+sudo sed -i 's/$releasever/6/g' /etc/yum.repos.d/CentOS-Base.repo
+sudo yum -y install gtk2 libv4l
+
 #enable 'Extra Packages' and EPEL
 cat /etc/yum.repos.d/epel.repo |sed 's/enabled=0/enabled=1/g' > tmp 
 sudo cp tmp /etc/yum.repos.d/epel.repo
