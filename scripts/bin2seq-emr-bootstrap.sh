@@ -20,9 +20,11 @@ sudo sed -i 's/$releasever/6/g' /etc/yum.repos.d/epel-apache-maven.repo
 sudo yum -y install apache-maven 
 
 sudo yum -y install python-pip python-devel netcdf4-python numpy
-sudo pip install aws 
 
 git clone https://github.com/openreserach/bin2seq.git
 cd bin2seq
 mvn clean compile
+
+#only at master node
+#sudo pip install aws 
 
