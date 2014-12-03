@@ -130,10 +130,11 @@ public class Util {
 			listSequenceFileKeys(inputURI);
 			System.exit(0);
 		}
-		if (inputURI.startsWith("s3://") && outputURI.startsWith("hdfs://") && (pos = argList.indexOf("-ext")) != -1) {
+		if (inputURI.startsWith("s3://") && (outputURI.startsWith("hdfs://") || outputURI.startsWith("s3://"))
+				&& (pos = argList.indexOf("-ext")) != -1) {
 			String ext = otherArgs[pos + 1];
 			logger.info("input ={},outputURI={}, ext={}", inputURI, outputURI, ext);
-			copyS3FilesToHDFS(inputURI, outputURI, ext, compression);
+			copyEncodeFilesFromS3ToHDFSS3(inputURI, outputURI, ext, compression);
 			System.exit(0);
 		}
 
@@ -224,12 +225,20 @@ public class Util {
 	 *            e.g., snappyCodec
 	 * @throws IOException
 	 */
-	public static void copyS3FilesToHDFS(String s3URI, String hdfsDir, String ext, CompressionCodec codec)
+	public static void copyEncodeFilesFromS3ToHDFSS3(String s3URI, String outputDir, String ext, CompressionCodec codec)
 			throws IOException {
 		String masterURL = getHadoopMasterURI();
 		conf.set("fs.defaultFS", masterURL);
-		Path outpath = new Path(masterURL + hdfsDir.replaceAll("^hdfs:/{2,}", "/"));
-		logger.debug("HDFS Output dir={}", hdfsDir);
+
+		Path outpath = null;
+		if (outputDir.startsWith("hdfs://"))
+			outpath = new Path(masterURL + outputDir.replaceAll("^hdfs:/{2,}", "/"));
+		else if (outputDir.startsWith("s3://") || outputDir.startsWith("s3n://")) {
+			outpath = new Path(outputDir);
+		} else {
+			throw new IOException("unsupported output format");
+		}
+		logger.debug("HDFS Output dir={}", outputDir);
 
 		String trimmedS3URI = s3URI.replaceAll("^s3[n]?:/{2,}", ""); //trim protocol part
 		String bucket = StringUtils.substringBefore(trimmedS3URI, "/"); //the first as bucket
@@ -246,8 +255,6 @@ public class Util {
 
 		for (S3ObjectSummary summary : summaries) {
 			String filename = summary.getKey();
-			logger.debug("file URI= {}", filename);
-
 			S3Object s3object = s3Client.getObject(summary.getBucketName(), summary.getKey());
 			InputStream objectContent = s3object.getObjectContent();
 
@@ -487,16 +494,21 @@ public class Util {
 			key = new Text(dataFile.getAbsolutePath());
 			value = new BytesWritable(uncompressed);
 		} else if (inputURI.startsWith("s3://") || inputURI.startsWith("s3n://")) {
-			String[] args = inputURI.split("/");
-			String bucket = args[2].split("\\.")[0];
-			logger.debug("inputURI={},bucket={}", inputURI, bucket);
-			List<String> argsList = new LinkedList<String>(Arrays.asList(args));
-			argsList.remove(0);
-			argsList.remove(0);
-			argsList.remove(0);// trimming leading protocol and bucket
-			String object = StringUtils.join(argsList, "/");
-			logger.debug("object={}", object);
-			GetObjectRequest request = new GetObjectRequest(bucket, object);
+
+			String trimmedS3URI = inputURI.replaceAll("^s3[n]?:/{2,}", ""); //trim protocol part
+			String bucket = StringUtils.substringBefore(trimmedS3URI, "/"); //the first as bucket
+			String prefix = StringUtils.substringAfter(trimmedS3URI, "/"); //the rest are prefix
+
+			//ObjectListing listing = s3Client.listObjects(bucket, prefix);
+			/*
+			 * String[] args = inputURI.split("/"); String bucket = args[2].split("\\.")[0];
+			 * logger.debug("inputURI={},bucket={}", inputURI, bucket); List<String> argsList = new
+			 * LinkedList<String>(Arrays.asList(args)); argsList.remove(0); argsList.remove(0); argsList.remove(0);//
+			 * trimming leading protocol and bucket String object = StringUtils.join(argsList, "/");
+			 */
+			logger.debug("inputURI={}, bucket={}, prefix={}", inputURI, bucket, prefix);
+
+			GetObjectRequest request = new GetObjectRequest(bucket, prefix);
 			S3Object s3object = s3Client.getObject(request);
 			InputStream objectContent = s3object.getObjectContent();
 			bytes = org.apache.commons.io.IOUtils.toByteArray(objectContent);
