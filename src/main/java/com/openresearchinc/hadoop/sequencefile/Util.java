@@ -253,6 +253,8 @@ public class Util {
 		}
 		logger.debug("file #={}", summaries.size());
 
+		int seq = 1; //starting number of packed sequence File 1.seq, 2.seq,...
+		SequenceFile.Writer writer = createSequenceFileWriter(outpath + "/" + seq + ".seq", codec);
 		for (S3ObjectSummary summary : summaries) {
 			String filename = summary.getKey();
 			S3Object s3object = s3Client.getObject(summary.getBucketName(), summary.getKey());
@@ -271,13 +273,11 @@ public class Util {
 						logger.debug("tar filename={}", tarArchiveEntry.getName());
 						String filenameInTar = StringUtils.substringBeforeLast(filename, "/")
 								+ tarArchiveEntry.getName().replaceAll("^\\.", "");
-						Text key = new Text(filenameInTar);
-						BytesWritable value = new BytesWritable(bytes);
 						logger.debug("hdfs path={}", outpath + "/" + filenameInTar + ".seq");
-						SequenceFile.Writer writer = createSequenceFileWriter(outpath + "/" + filenameInTar + ".seq",
-								codec);
-						writer.append(key, value);
-						writer.close();
+						if (packingManyFilesToOneSequenceFile(writer, filenameInTar, bytes) == 0) {
+							writer.close();
+							writer = createSequenceFileWriter(outpath + "/" + seq++ + ".seq", codec);
+						}
 					}
 				}
 				tarArchiveInputStream.close();
@@ -298,12 +298,11 @@ public class Util {
 						else
 							continue; //skip if it is other meta data like *.<ext>.md5
 					}
-					Text key = new Text(filename);
-					BytesWritable value = new BytesWritable(bytes);
 					logger.debug("hdfs path={}", outpath + "/" + filename + ".seq");
-					SequenceFile.Writer writer = createSequenceFileWriter(outpath + "/" + filename + ".seq", codec);
-					writer.append(key, value);
-					writer.close();
+					if (packingManyFilesToOneSequenceFile(writer, filename, bytes) == 0) {
+						writer.close();
+						writer = createSequenceFileWriter(outpath + "/" + seq++ + ".seq", codec);
+					}
 				}
 			}
 			objectContent.close();
@@ -401,7 +400,7 @@ public class Util {
 		if (codec == null) {
 			compressionType = CompressionType.NONE;
 		} else {
-			compressionType = CompressionType.RECORD;
+			compressionType = CompressionType.BLOCK;
 		}
 
 		SequenceFile.Writer writer = SequenceFile.createWriter(conf, SequenceFile.Writer.file(new Path(absolutepath)),
