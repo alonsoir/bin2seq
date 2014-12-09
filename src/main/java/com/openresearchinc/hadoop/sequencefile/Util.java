@@ -307,6 +307,7 @@ public class Util {
 			}
 			objectContent.close();
 		}
+		writer.close();
 	}
 
 	/**
