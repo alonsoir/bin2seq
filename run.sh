@@ -24,7 +24,7 @@ HADOOP_HEAPSIZE=$HEAPSIZE $CMD com.openresearchinc.hadoop.sequencefile.GeoTiff -
          
         netcdf)
 aws s3 rm --recursive s3://ori-bin2seq/netcdf-seq
-HADOOP_HEAPSIZE=$HEAPSIZE $CMD com.openresearchinc.hadoop.sequencefile.Util -libjars $LIBJARS -in s3://nasanex/NEX-DCP30/BCSD/rcp26/mon/atmos/pr/r1i1p1/v1.0/CONUS/pr_amon_BCSD_rcp26_r1i1p1_CONUS_HadGEM2-ES_200512-200512.nc -ext nc -out s3://ori-bin2seq/netcdf-seq -codec snappy #large size problem??
+HADOOP_HEAPSIZE=$HEAPSIZE $CMD com.openresearchinc.hadoop.sequencefile.Util -libjars $LIBJARS -in s3://nasanex/NEX-DCP30/BCSD/rcp26/mon/atmos/pr/r1i1p1/v1.0/CONUS/pr_amon_BCSD_rcp26_r1i1p1_CONUS_HadGEM2-ES_200512-200512.nc -ext nc -out s3://ori-bin2seq/netcdf-seq -codec none #large size problem??
 hadoop fs -rm -f -r /output
 HADOOP_HEAPSIZE=$HEAPSIZE $CMD com.openresearchinc.hadoop.sequencefile.NetCDF -libjars ${LIBJARS} s3://ori-bin2seq/netcdf-seq hdfs:///output
             ;;
